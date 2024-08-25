@@ -36,6 +36,13 @@ jobs:
           USER: ec2-user
         run: |
           echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
-          ssh -i private_key -o StrictHostKeyChecking=no ${USER}@${HOST} 'mkdir -p ~/backend'
-          scp -i private_key -o StrictHostKeyChecking=no -r backend/* ${USER}@${HOST}:~/backend
-          ssh -i private_key -o StrictHostKeyChecking=no ${USER}@${HOST} 'cd ~/backend && npm start'
+          ssh -i private_key -o StrictHostKeyChecking=no ${USER}@${HOST} '
+            rm -rf ~/backend &&
+            mkdir -p ~/backend
+          '
+          scp -i private_key -o StrictHostKeyChecking=no -r backend/dist/* backend/package*.json ${USER}@${HOST}:~/backend
+          ssh -i private_key -o StrictHostKeyChecking=no ${USER}@${HOST} '
+            cd ~/backend &&
+            npm ci &&
+            npm start
+          '
