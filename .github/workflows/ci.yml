@@ -40,7 +40,8 @@ jobs:
             rm -rf ~/backend &&
             mkdir -p ~/backend
           '
-          scp -i private_key -o StrictHostKeyChecking=no -r backend/dist/* backend/package*.json ${USER}@${HOST}:~/backend
+          rm -rf backend/node_modules
+          scp -i private_key -o StrictHostKeyChecking=no -r backend/* ${USER}@${HOST}:~/backend
           ssh -i private_key -o StrictHostKeyChecking=no ${USER}@${HOST} '
             cd ~/backend &&
             npm ci &&
