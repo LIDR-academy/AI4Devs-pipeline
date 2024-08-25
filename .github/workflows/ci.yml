@@ -37,5 +37,5 @@ jobs:
         run: |
           echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
           ssh -i private_key -o StrictHostKeyChecking=no ${USER}@${HOST} 'mkdir -p ~/backend'
-          scp -i private_key -o StrictHostKeyChecking=no -r backend/dist/* ${USER}@${HOST}:~/backend
+          scp -i private_key -o StrictHostKeyChecking=no -r backend/* ${USER}@${HOST}:~/backend
           ssh -i private_key -o StrictHostKeyChecking=no ${USER}@${HOST} 'cd ~/backend && npm start'
