@@ -32,10 +32,14 @@ app.use((req, res, next) => {
 });
 
 // Middleware para permitir CORS desde http://localhost:3000
-app.use(cors({
-  origin: 'http://localhost:3000',
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: 'http://localhost:3000',
+    credentials: true,
+  }),
+);
+
+console.log('hola');
 
 // Import and use candidateRoutes
 app.use('/candidates', candidateRoutes);
