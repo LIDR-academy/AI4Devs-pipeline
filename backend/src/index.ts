@@ -39,8 +39,6 @@ app.use(
   }),
 );
 
-console.log('hola');
-
 // Import and use candidateRoutes
 app.use('/candidates', candidateRoutes);
 
