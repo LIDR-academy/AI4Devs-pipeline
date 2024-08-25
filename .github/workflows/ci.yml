@@ -45,5 +45,5 @@ jobs:
           ssh -i private_key -o StrictHostKeyChecking=no ${USER}@${HOST} '
             cd ~/backend &&
             npm ci &&
-            npm start
+            nohup npm start > app.log 2>&1 &
           '
