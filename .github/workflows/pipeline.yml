@@ -24,28 +24,10 @@ jobs:
         restore-keys: |
           ${{ runner.OS }}-node-
 
-    - name: Debug - List backend directory contents
-      run: |
-        cd backend
-        ls -la
-
-    - name: Debug - Display package.json content
-      run: |
-        cd backend
-        cat package.json
-
-    - name: Debug - Display npm config
-      run: |
-        npm config list
-
-    - name: Debug - Display npm version
-      run: |
-        npm --version
-
     - name: Install dependencies
       run: |
         cd backend
-        npm install --verbose
+        npm install
 
     - name: Run backend tests
       run: |
