@@ -48,4 +48,4 @@ jobs:
           echo "Deploying to EC2"
           chmod 600 $EC2_KEY
           scp -i $EC2_KEY -o StrictHostKeyChecking=no -r ./backend/dist/* $EC2_USER@$EC2_HOST:/opt/backend
-          ssh -i $EC2_KEY -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "cd /opt/backend && pm2 restart all"
+          ssh -i $EC2_KEY -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "cd /opt/backend && sudo pm2 restart all"
