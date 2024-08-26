@@ -1,11 +1,12 @@
 name: Backend CI/CD Pipeline
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - main
     paths:
       - 'backend/**'
-      - '.github/workflows/backend-ci-cd.yml'
+      - '.github/workflows/pipeline.yml'
 
 jobs:
   build-test-deploy:
