@@ -22,13 +22,22 @@ jobs:
           node-version: '16'
 
       - name: Install dependencies
-        run: npm install
+        run: |
+            echo "Installing dependencies"
+            cd backend
+            npm install
 
       - name: Run backend tests
-        run: npm test
+        run: |
+            echo "Running backend tests"
+            cd backend
+            npm test
 
       - name: Build backend
-        run: npm run build
+        run: |
+            echo "Building backend"
+            cd backend
+            npm run build
 
       - name: Deploy to EC2
         env:
@@ -36,5 +45,5 @@ jobs:
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_KEY: ${{ secrets.EC2_KEY }}
         run: |
-          scp -i $EC2_KEY -o StrictHostKeyChecking=no -r ./dist/* $EC2_USER@$EC2_HOST:/path/to/deployment
-          ssh -i $EC2_KEY -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "cd /path/to/deployment && npm install --production && pm2 restart all"
+          scp -i $EC2_KEY -o StrictHostKeyChecking=no -r ./backend/dist/* $EC2_USER@$EC2_HOST:/opt/backend
+          ssh -i $EC2_KEY -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "cd /opt/backend && npm install --production && pm2 restart all"
