@@ -283,3 +283,82 @@ pipeline.yml
 "
 This verification step will now also print the installed versions of Node.js and PM2, which can be helpful for debugging if there are any issues.
 With these changes, your pipeline should be able to set up the necessary environment on your EC2 instance and deploy your application successfully.
+
+---
+
+> **MPC**: doing the step "Deploy to EC2" the command "sudo apt update" is not working, keep in mind that, my AWS instance, is a linux not and ubuntu
+
+---
+
+*Cursor assistant response:*
+
+I understand you're having trouble with the "sudo apt update" command on your AWS EC2 instance, which is running Linux but not Ubuntu. This is likely because you're using an Amazon Linux AMI, which uses a different package manager than Ubuntu.
+For Amazon Linux, you should use the yum package manager instead of apt. Here's the equivalent command:
+Bash
+update
+This command will update the package lists and upgrade installed packages on your Amazon Linux instance.
+If you need to install new packages, you would use:
+Bash
+name
+Remember that some other Ubuntu-specific commands might also need to be adjusted for Amazon Linux. If you encounter any other issues or need help with specific commands, please let me know, and I'll be happy to assist you further.
+
+---
+
+> **MPC**: do the necessary changes on @pipeline.yml 
+
+---
+
+*Cursor assistant response:*
+
+Certainly! I'll modify the pipeline.yml file to work with Amazon Linux instead of Ubuntu. Here are the necessary changes:
+
+`(complete pipeline.yml)`
+
+Key changes made:
+Replaced sudo apt update with sudo yum update -y
+Changed the Node.js installation process to use the RPM-based setup script and yum instead of the Debian-based one
+Replaced sudo apt install -y nodejs with sudo yum install -y nodejs
+These changes should make the deployment process compatible with Amazon Linux. The rest of the file remains unchanged as it should work correctly on both Ubuntu and Amazon Linux.
+
+---
+
+> **MPC**: now is working.
+I want to improve the pipeline, better name, documented, help me to do it
+
+---
+
+*Cursor assistant response:*
+
+Certainly! I'll help you improve the pipeline by adding better naming, documentation, and some enhancements. Here's an updated version of your pipeline.yml:
+
+`(complete pipeline.yml)`
+
+Improvements and changes:
+Renamed the file to backend-ci-cd.yml for clarity.
+Added paths to the on section to trigger the workflow only when backend files or the workflow itself changes.
+Updated action versions to the latest (v3).
+4. Added name to the job for better readability in GitHub Actions UI.
+Used working-directory for backend-specific steps to avoid repetitive cd commands.
+Changed npm install to npm ci for more deterministic builds.
+Updated Node.js installation to use the LTS version (setup_lts.x).
+Used TARGET_DIR secret consistently throughout the deployment process.
+Renamed the PM2 process to ai4devs-backend for clarity.
+Added comments to explain each section of the deployment process.
+These changes should make your pipeline more robust, easier to maintain, and better documented. The workflow will now only run when changes are made to the backend code or the workflow file itself, which can help reduce unnecessary builds and deployments.
+
+---
+
+> **MPC**: now, I want to run this pipeline just if the push are done on main branch
+
+---
+
+*Cursor assistant response:*
+
+Certainly! I'll modify the pipeline to run only when pushes are made to the main branch. Here's the updated version of your pipeline.yml:
+
+`(complete pipeline.yml)`
+
+The main changes are in the on section at the top of the file:
+1. Replaced pull_request with push.
+Added a branches filter to specify that the workflow should only run on pushes to the main branch.
+These changes ensure that the pipeline will only run when changes are pushed directly to the main branch, and not on pull requests or pushes to other branches. The pipeline will still only trigger if the changes affect the backend code or the workflow file itself, thanks to the paths filter.
