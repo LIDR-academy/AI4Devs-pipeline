@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:  # Added this line to define an additional trigger
+    branches:
+      - main
 
 jobs:
   build:
