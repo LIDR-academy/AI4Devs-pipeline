@@ -1,0 +1,46 @@
+name: CI/CD - Test, Build, and Deploy Backend
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - '**'
+
+jobs:
+  test-build-and-deploy-backend:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18' # Ajusta esta versión según la que uses en tu proyecto
+
+    - name: Install dependencies
+      run: npm install
+      working-directory: backend
+
+    - name: Run tests
+      run: npm test
+      working-directory: backend
+
+    - name: Build backend
+      run: npm run build
+      working-directory: backend
+
+    - name: Deploy to EC2
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        EC2_HOST: ${{ secrets.EC2_HOST }}
+        EC2_USER: ${{ secrets.EC2_USER }}
+      run: |
+        echo "$SSH_PRIVATE_KEY" > private_key.pem
+        chmod 600 private_key.pem
+        scp -i private_key.pem -r backend/* $EC2_USER@$EC2_HOST:/path/to/deploy/
+        ssh -i private_key.pem $EC2_USER@$EC2_HOST 'cd /path/to/deploy && npm install --production && pm2 restart all'
+      working-directory: backend
