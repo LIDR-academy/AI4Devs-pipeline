@@ -3,21 +3,26 @@ name: Backend CI/CD Pipeline
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci-cd.yml'
 
 jobs:
   build-test-deploy:
+    name: Build, Test, and Deploy Backend
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v2
+    - name: Checkout code
+      uses: actions/checkout@v3
 
     - name: Set up Node.js
-      uses: actions/setup-node@v2
+      uses: actions/setup-node@v3
       with:
         node-version: 'lts/*'
 
     - name: Cache Node.js modules
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: ~/.npm
         key: ${{ runner.OS }}-node-${{ hashFiles('**/package-lock.json') }}
@@ -25,19 +30,16 @@ jobs:
           ${{ runner.OS }}-node-
 
     - name: Install dependencies
-      run: |
-        cd backend
-        npm install
+      working-directory: ./backend
+      run: npm install
 
     - name: Run backend tests
-      run: |
-        cd backend
-        npm test
+      working-directory: ./backend
+      run: npm test
 
     - name: Build backend
-      run: |
-        cd backend
-        npm run build
+      working-directory: ./backend
+      run: npm run build
 
     - name: Deploy to EC2
       env:
@@ -47,27 +49,34 @@ jobs:
         USERNAME: ${{ secrets.USERNAME }}
         NODE_ENV: production
       run: |
+        # Setup SSH key
         echo "$EC2_SSH_KEY" > ec2_key.pem
         chmod 600 ec2_key.pem
+
+        # Update and prepare EC2 instance
         ssh -i ec2_key.pem -o StrictHostKeyChecking=no $USERNAME@$HOST_DNS "
           # Update package list and install Node.js
           sudo yum update -y
-          curl -sL https://rpm.nodesource.com/setup_14.x | sudo bash -
+          curl -sL https://rpm.nodesource.com/setup_lts.x | sudo bash -
           sudo yum install -y nodejs
           
           # Install PM2 globally
           sudo npm install -g pm2
           
           # Create deployment directory
-          sudo mkdir -p /var/www
-          sudo chown $USERNAME:$USERNAME /var/www
+          sudo mkdir -p $TARGET_DIR
+          sudo chown $USERNAME:$USERNAME $TARGET_DIR
         "
-        scp -i ec2_key.pem -o StrictHostKeyChecking=no -r backend/dist/* $USERNAME@$HOST_DNS:/var/www/
+
+        # Copy built files to EC2
+        scp -i ec2_key.pem -o StrictHostKeyChecking=no -r backend/dist/* $USERNAME@$HOST_DNS:$TARGET_DIR/
+
+        # Start/Restart application
         ssh -i ec2_key.pem -o StrictHostKeyChecking=no $USERNAME@$HOST_DNS "
-          cd /var/www && 
-          npm install --production && 
+          cd $TARGET_DIR && 
+          npm ci --only=production && 
           echo 'NODE_ENV=${{ env.NODE_ENV }}' > .env &&
-          pm2 restart ai4devs-pipeline || pm2 start npm --name 'ai4devs-pipeline' -- start
+          pm2 restart ai4devs-backend || pm2 start npm --name 'ai4devs-backend' -- start
         "
 
     - name: Verify Deployment
@@ -79,7 +88,7 @@ jobs:
         ssh -i ec2_key.pem -o StrictHostKeyChecking=no $USERNAME@$HOST_DNS "
           echo 'Node.js version:' && node --version &&
           echo 'PM2 version:' && pm2 --version &&
-          if pm2 show ai4devs-pipeline | grep -q 'online'; then
+          if pm2 show ai4devs-backend | grep -q 'online'; then
             echo 'Deployment successful: Application is running'
             exit 0
           else
