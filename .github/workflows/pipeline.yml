@@ -1,0 +1,89 @@
+name: Backend CI/CD Pipeline
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '14'
+
+    - name: Cache Node.js modules
+      uses: actions/cache@v2
+      with:
+        path: ~/.npm
+        key: ${{ runner.OS }}-node-${{ hashFiles('**/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.OS }}-node-
+
+    - name: Install dependencies
+      run: |
+        cd backend
+        npm ci
+
+    - name: Run backend tests
+      run: |
+        cd backend
+        npm test
+
+    - name: Build backend
+      run: |
+        cd backend
+        npm run build
+
+    - name: Deploy to EC2
+      env:
+        EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        HOST_DNS: ${{ secrets.HOST_DNS }}
+        TARGET_DIR: ${{ secrets.TARGET_DIR }}
+        USERNAME: ${{ secrets.USERNAME }}
+        NODE_ENV: production
+      run: |
+        echo "$EC2_SSH_KEY" > ec2_key.pem
+        chmod 600 ec2_key.pem
+        ssh -i ec2_key.pem -o StrictHostKeyChecking=no $USERNAME@$HOST_DNS "
+          # Update package list and install Node.js
+          sudo apt update
+          curl -fsSL https://deb.nodesource.com/setup_14.x | sudo -E bash -
+          sudo apt install -y nodejs
+          
+          # Install PM2 globally
+          sudo npm install -g pm2
+          
+          # Create deployment directory
+          sudo mkdir -p /var/www
+          sudo chown $USERNAME:$USERNAME /var/www
+        "
+        scp -i ec2_key.pem -o StrictHostKeyChecking=no -r backend/dist/* $USERNAME@$HOST_DNS:/var/www/
+        ssh -i ec2_key.pem -o StrictHostKeyChecking=no $USERNAME@$HOST_DNS "
+          cd /var/www && 
+          npm install --production && 
+          echo 'NODE_ENV=${{ env.NODE_ENV }}' > .env &&
+          pm2 restart ai4devs-pipeline || pm2 start npm --name 'ai4devs-pipeline' -- start
+        "
+
+    - name: Verify Deployment
+      env:
+        EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        HOST_DNS: ${{ secrets.HOST_DNS }}
+        USERNAME: ${{ secrets.USERNAME }}
+      run: |
+        ssh -i ec2_key.pem -o StrictHostKeyChecking=no $USERNAME@$HOST_DNS "
+          echo 'Node.js version:' && node --version &&
+          echo 'PM2 version:' && pm2 --version &&
+          if pm2 show ai4devs-pipeline | grep -q 'online'; then
+            echo 'Deployment successful: Application is running'
+            exit 0
+          else
+            echo 'Deployment failed: Application is not running'
+            exit 1
+          fi
+        "
