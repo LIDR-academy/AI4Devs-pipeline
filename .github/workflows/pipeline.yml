@@ -34,10 +34,18 @@ jobs:
         cd backend
         cat package.json
 
+    - name: Debug - Display npm config
+      run: |
+        npm config list
+
+    - name: Debug - Display npm version
+      run: |
+        npm --version
+
     - name: Install dependencies
       run: |
         cd backend
-        npm ci
+        npm install
 
     - name: Run backend tests
       run: |
