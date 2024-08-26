@@ -60,7 +60,7 @@ export const findCandidateById = async (id: number): Promise<Candidate | null> =
         const candidate = await Candidate.findOne(id); // Cambio aquí: pasar directamente el id
         return candidate;
     } catch (error) {
-        console.error('Error al buscar el candidato:', error);
+        console.error('Ha ocurrido un error al buscar el candidato:', error);
         throw new Error('Error al recuperar el candidato');
     }
 };
