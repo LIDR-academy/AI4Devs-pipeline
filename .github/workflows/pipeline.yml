@@ -37,7 +37,9 @@ jobs:
         run: |
             echo "Building backend"
             cd backend
-            npm run build --production
+            npm run prisma:init
+            npm run prisma:generate
+            npm run build
 
       - name: Deploy to EC2
         env:
@@ -53,4 +55,4 @@ jobs:
           # Deploy the backend
           scp -i ./ec2_key.pem -o StrictHostKeyChecking=no -r ./backend/dist/* $EC2_USER@$EC2_HOST:/opt/backend
           scp -i ./ec2_key.pem -o StrictHostKeyChecking=no ./backend/package.json $EC2_USER@$EC2_HOST:/opt/backend
-          ssh -i ./ec2_key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "cd /opt/backend && npm install --production && sudo pm2 stop all && sudo pm2 start index.js"
+          ssh -i ./ec2_key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "cd /opt/backend && npm install --production  && sudo pm2 stop all && sudo pm2 start index.js"
