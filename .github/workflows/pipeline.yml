@@ -1,0 +1,48 @@
+name: Node.js CI/CD Pipeline
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Use Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '20'
+
+    - name: Install dependencies
+      run: |
+        cd backend
+        npm ci
+
+    - name: Run tests
+      run: |
+        cd backend
+        npm test
+
+    - name: Build application
+      if: success()
+      run: |
+        cd backend
+        npm run build
+        npm prune --production
+
+    - name: Deploy to EC2
+      if: success()
+      env:
+        PRIVATE_KEY: ${{ secrets.EC2_PRIVATE_KEY }}
+        HOST: ${{ secrets.EC2_HOST }}
+        USER: ${{ secrets.EC2_USER }}
+      run: |
+        echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
+        scp -i private_key -o StrictHostKeyChecking=no -r backend/* ${USER}@${HOST}:~/app
+        ssh -i private_key -o StrictHostKeyChecking=no ${USER}@${HOST} '
+          cd ~/app &&
+          npm start
+        '
