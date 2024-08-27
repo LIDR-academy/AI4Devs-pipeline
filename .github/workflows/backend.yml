@@ -1,0 +1,84 @@
+# This is a pipeline for the AI4Devs project
+name: Backend Tests and Build
+on:
+  workflow_call:
+
+jobs:
+  test-backend:
+    name: 🧪 Tests
+    runs-on: ubuntu-latest
+    steps:
+    - name: 😼 Checkout
+      uses: actions/checkout@v3
+
+    - name: Use Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16.x'
+
+    - name: 🔧 Install dependencies
+      run: |
+        cd backend
+        npm ci
+
+    - name: ⛑️ Run backend tests
+      run: |
+        cd backend
+        npm test
+
+  # build-backend:
+  #   name: 🏗️ Build
+  #   needs: test-backend
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #   - name: 😼 Checkout
+  #     uses: actions/checkout@v3
+
+  #   - name: Use Node.js
+  #     uses: actions/setup-node@v3
+  #     with:
+  #       node-version: '16.x'
+
+  #   - name: 🔧 Install dependencies
+  #     run: |
+  #       cd backend
+  #       npm ci
+
+  #   - name: Build backend
+  #     run: |
+  #       cd backend
+  #       npm run build
+
+  #   - name: 🚀 Upload backend build artifact
+  #     uses: actions/upload-artifact@v3
+  #     with:
+  #       name: backend-build
+  #       path: backend/dist
+
+  # deploy-backend:
+  #   name: 🚀 Deploy
+  #   needs: build-backend
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #   - name: Download backend build artifact
+  #     uses: actions/download-artifact@v3
+  #     with:
+  #       name: backend-build
+  #       path: backend/dist
+
+  #   - name: 🧙🏾‍♂️ Deploy to EC2
+  #     env:
+  #       PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+  #       HOST: ${{ secrets.EC2_HOST }}
+  #       USER: ${{ secrets.EC2_USER }}
+  #     run: |
+  #       echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
+  #       scp -i private_key -o StrictHostKeyChecking=no -r backend/dist/* ${USER}@${HOST}:/home/${USER}/backend
+  #       ssh -i private_key -o StrictHostKeyChecking=no ${USER}@${HOST} "
+  #         command -v pm2 >/dev/null 2>&1 || sudo npm install -g pm2
+  #         cd /home/${USER}/backend
+  #         npm install --production
+  #         pm2 stop backend || true
+  #         pm2 start dist/index.js --name backend
+  #       "
+  #       rm -f private_key
