@@ -46,6 +46,6 @@ jobs:
           EC2_KEY: ${{ secrets.EC2_KEY }}
         run: |
           echo "Deploying to EC2"
-          chmod 600 $EC2_KEY
-          scp -i $EC2_KEY -o StrictHostKeyChecking=no -r ./backend/dist/* $EC2_USER@$EC2_HOST:/opt/backend
-          ssh -i $EC2_KEY -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "cd /opt/backend && sudo pm2 stop all && sudo pm2 start index.js"
+          ssh-add $EC2_KEY
+          scp -o StrictHostKeyChecking=no -r ./backend/dist/* $EC2_USER@$EC2_HOST:/opt/backend
+          ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "cd /opt/backend && sudo pm2 stop all && sudo pm2 start index.js"
