@@ -54,4 +54,5 @@ jobs:
           # Deploy the backend
           scp -i ./ec2_key.pem -o StrictHostKeyChecking=no -r ./backend/dist/* $EC2_USER@$EC2_HOST:/opt/backend
           scp -i ./ec2_key.pem -o StrictHostKeyChecking=no ./backend/package.json $EC2_USER@$EC2_HOST:/opt/backend
+          scp -i ./ec2_key.pem -o StrictHostKeyChecking=no ./backend/prisma/schema.prisma $EC2_USER@$EC2_HOST:/opt/backend/prisma/
           ssh -i ./ec2_key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "cd /opt/backend && npm install --production  && sudo pm2 stop all && sudo pm2 start index.js"
