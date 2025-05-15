@@ -1,0 +1,188 @@
+# Pipeline para el backend de LTI - Talent Tracking System
+# Este pipeline se ejecuta cuando se crea o actualiza un Pull Request
+# Realiza tests, build y despliegue en EC2
+#
+# Estructura del pipeline:
+# 1. Test: Verifica que el código funcione correctamente
+# 2. Build: Compila el código para producción
+# 3. Deploy: Despliega la aplicación en EC2
+#
+# Notas importantes:
+# - Usamos Node.js 18 LTS por su estabilidad y soporte a largo plazo
+# - Implementamos caché de npm para optimizar los tiempos de build
+# - Los jobs se ejecutan secuencialmente (test -> build -> deploy)
+# - Se utilizan secrets de GitHub para datos sensibles
+
+name: Backend Pipeline
+
+# Configuración del trigger:
+# - types: [opened, synchronize] -> Se ejecuta cuando:
+#   * opened: Se abre un nuevo PR
+#   * synchronize: Se actualiza un PR existente
+# - branches: ['main'] -> Solo se ejecuta en PRs hacia la rama main
+on:
+  pull_request:
+    types: [opened, synchronize]
+    branches:
+      - main
+
+jobs:
+  # Job de Tests
+  # Propósito: Verificar que el código funcione correctamente antes de proceder
+  test:
+    name: Run Backend Tests
+    # Ubuntu latest proporciona un entorno estable y actualizado
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Checkout del código
+      # Usamos v3 por mejoras de rendimiento y seguridad
+      - name: Checkout código
+        uses: actions/checkout@v3
+      
+      # Configuración de Node.js
+      # - node-version: '18' -> Versión LTS estable
+      # - cache: 'npm' -> Habilita caché de dependencias
+      # - cache-dependency-path: Especifica dónde buscar package-lock.json
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      
+      # Instalación de dependencias
+      # npm ci vs npm install:
+      # - Más rápido y determinista
+      # - Usa package-lock.json exactamente
+      # - Ideal para CI/CD
+      - name: Instalar dependencias
+        run: |
+          cd backend
+          npm ci
+      
+      # Ejecución de tests
+      # Se ejecuta después de instalar dependencias
+      - name: Ejecutar tests
+        run: |
+          cd backend
+          npm test
+
+  # Job de Build
+  # Propósito: Compilar el código para producción
+  # Depende de que los tests pasen (needs: test)
+  build:
+    name: Build Backend
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+      
+      # Misma configuración de Node.js que en test
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      
+      - name: Instalar dependencias
+        run: |
+          cd backend
+          npm ci
+      
+      # Generación del build
+      # Compila TypeScript a JavaScript
+      - name: Build del backend
+        run: |
+          cd backend
+          npm run build
+      
+      # Guardado del build como artifact
+      # - name: Identificador único del artifact
+      # - path: Ruta de los archivos a guardar
+      # - retention-days: Tiempo de retención (1 día es suficiente)
+      - name: Guardar build como artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-build
+          path: backend/dist
+          retention-days: 1
+
+  # Job de Deploy
+  # Propósito: Desplegar la aplicación en EC2
+  # Depende de que el build se complete (needs: build)
+  deploy:
+    name: Deploy to EC2
+    needs: build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+      
+      # Descarga del build generado
+      # Se descarga en la misma ruta que se subió
+      - name: Descargar build
+        uses: actions/download-artifact@v3
+        with:
+          name: backend-build
+          path: backend/dist
+      
+      # Configuración de AWS
+      # Usa secrets de GitHub para las credenciales
+      # aws-region: Debe coincidir con la región de tu EC2
+      - name: Configurar AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      
+      # Deploy en EC2
+      # Usa SSH para conectarse y ejecutar comandos
+      # PM2 para gestión de procesos Node.js
+      - name: Deploy a EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Crear directorio si no existe
+            # -p: Crea directorios padres si no existen
+            mkdir -p /home/ec2-user/app/backend
+            
+            # Detener aplicación existente
+            # || true: Continúa si no hay procesos
+            pm2 stop all || true
+            
+            # Limpieza del directorio
+            # Asegura un deploy limpio
+            rm -rf /home/ec2-user/app/backend/*
+            
+            # Copia de archivos
+            # -r: Recursivo para directorios
+            cp -r /tmp/backend/dist/* /home/ec2-user/app/backend/
+            
+            # Instalación de dependencias
+            # --production: Solo dependencias de producción
+            cd /home/ec2-user/app/backend
+            npm ci --production
+            
+            # Inicio de la aplicación
+            # PM2 proporciona:
+            # - Auto-restart en fallos
+            # - Logs
+            # - Monitoreo
+            pm2 start dist/index.js --name "lti-backend"
+            
+            # Persistencia de la configuración
+            # Necesario para que PM2 inicie después de reinicios
+            pm2 save
+            
+            # Verificación del estado
+            # Confirma que la aplicación está corriendo
+            pm2 status 
