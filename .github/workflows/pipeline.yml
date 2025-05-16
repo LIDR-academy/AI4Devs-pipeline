@@ -58,12 +58,19 @@ jobs:
           npm run build
   
   deploy-to-ec2:
-    # Ejecutar en push a cualquier rama co
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    # Simplificar condición - ejecutar en cualquier push
+    if: github.event_name == 'push'
     needs: build-and-test
     runs-on: ubuntu-latest
     
     steps:
+      - name: Debug - Información de contexto
+        run: |
+          echo "Event name: ${{ github.event_name }}"
+          echo "Branch ref: ${{ github.ref }}"
+          echo "Action: ${{ github.event.action }}"
+          echo "¿PR existe? ${{ github.event.pull_request != null }}"
+          
       - name: Checkout código
         uses: actions/checkout@v4
       
