@@ -1,0 +1,111 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - '*'
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      # Backend tests
+      - name: Install backend dependencies
+        run: cd backend && npm install
+
+      - name: Run backend tests
+        run: cd backend && npm test
+
+      # Frontend tests
+      - name: Install frontend dependencies
+        run: cd frontend && npm install
+
+      - name: Run frontend tests
+        run: cd frontend && npm run test
+
+      # Backend build
+      - name: Build backend
+        run: cd backend && npm run build
+
+      # Frontend build
+      - name: Build frontend
+        run: cd frontend && npm run build
+
+      # Save build artifacts
+      - name: Save artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifacts
+          path: |
+            backend/dist
+            frontend/build
+
+  deploy:
+    needs: test-and-build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: build-artifacts
+
+      - name: Install SSH key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          known_hosts: 'just-a-placeholder-so-we-dont-get-errors'
+          
+      - name: Add EC2 to known hosts
+        run: ssh-keyscan -H ${{ secrets.EC2_INSTANCE }} >> ~/.ssh/known_hosts
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-region: eu-north-1 
+
+      - name: Deploy to EC2
+        run: |
+          # Create temp directories for deployment
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }} "mkdir -p ~/deploy-temp/backend ~/deploy-temp/frontend"
+          
+          # Copy build files to EC2
+          scp -r backend/dist/* ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }}:~/deploy-temp/backend/
+          scp -r frontend/build/* ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }}:~/deploy-temp/frontend/
+          
+          # Execute deployment script on EC2 (stop services, move files, restart services)
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }} "
+            # Stop running services
+            pm2 stop backend || true
+            pm2 stop frontend || true
+            
+            # Move files to production directories
+            rm -rf ~/backend/* && mv ~/deploy-temp/backend/* ~/backend/
+            rm -rf ~/frontend/* && mv ~/deploy-temp/frontend/* ~/frontend/
+            
+            # Install dependencies if needed
+            cd ~/backend && npm install --production
+            
+            # Start services
+            cd ~/backend && pm2 start npm --name backend -- start
+            cd ~/frontend && pm2 serve . 3000 --name frontend --spa
+            
+            # Clean up
+            rm -rf ~/deploy-temp
+          " 
