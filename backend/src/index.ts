@@ -17,6 +17,7 @@ declare global {
 }
 
 // Configuración del entorno y creación del cliente Prisma
+// Actualizado para forzar ejecución del workflow
 dotenv.config();
 const prisma = new PrismaClient();
 

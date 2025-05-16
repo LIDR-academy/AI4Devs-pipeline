@@ -3,10 +3,12 @@ name: Backend CI/CD Pipeline
 on:
   push:
     branches:
+      - 'pipeline-LPS'  # Incluir explícitamente esta rama
       - '**'
       - '!main'  # Excluyendo la rama principal
     paths:
       - 'backend/**'  # Solo ejecutar cuando hay cambios en el backend
+      - '.github/workflows/**'  # También ejecutar cuando hay cambios en los workflows
 
 jobs:
   test:
