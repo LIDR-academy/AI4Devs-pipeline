@@ -3,9 +3,9 @@ name: Backend CI/CD Pipeline
 on:
   push:
     branches:
-      - '**'
-    paths:
-      - 'backend/**'
+      - '*'
+  pull_request:
+    types: [opened, synchronize]
 
 jobs:
   check_pr:
