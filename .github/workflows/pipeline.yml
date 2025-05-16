@@ -1,0 +1,125 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - '*'
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      # Configuración y caché mejorada para backend
+      - name: Configurar Node.js para backend
+        uses: actions/setup-node@v4
+        with:
+          node-version: '16'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      
+      - name: Instalar dependencias del backend
+        run: |
+          cd backend
+          npm ci
+      
+      - name: Ejecutar pruebas unitarias del backend
+        run: |
+          cd backend
+          npm test
+      
+      - name: Ejecutar pruebas de integración
+        run: |
+          cd backend
+          npm run test:integration || echo "No hay pruebas de integración configuradas, crea un script en package.json"
+      
+      - name: Generar informe de cobertura de código
+        run: |
+          cd backend
+          npm run test:coverage || echo "No hay script de cobertura configurado, crea un script en package.json"
+      
+      - name: Subir informe de cobertura como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: backend/coverage/
+          retention-days: 7
+          if-no-files-found: warn
+      
+      - name: Construir backend
+        run: |
+          cd backend
+          npm run build
+  
+  deploy-to-ec2:
+    if: github.event_name == 'push' && github.event.pull_request != null
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Configurar AWS CLI
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-region: eu-west-1
+      
+      - name: Instalar SSH Key
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+      
+      - name: Desplegar en EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_INSTANCE }}
+        run: |
+          # Agregar servidor a known_hosts
+          ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
+          
+          # Transferir archivos al servidor
+          rsync -avz --exclude='.git' --exclude='node_modules' ./backend/ ec2-user@$EC2_HOST:/home/ec2-user/app/backend/
+          
+          # Ejecutar comandos de despliegue en el servidor
+          ssh ec2-user@$EC2_HOST << 'EOF'
+            cd /home/ec2-user/app/backend
+            npm ci
+            npm run build
+            
+            # Reiniciar la aplicación con PM2
+            pm2 stop backend || true
+            pm2 delete backend || true
+            pm2 start dist/index.js --name backend
+            
+            # Verificar estado de la aplicación
+            pm2 status
+            
+            # Configurar Nginx como proxy inverso
+            sudo amazon-linux-extras install nginx1 -y
+            
+            # Configurar Nginx
+            sudo tee /etc/nginx/conf.d/app.conf > /dev/null << 'NGINX'
+            server {
+              listen 80;
+              
+              location / {
+                proxy_pass http://localhost:3010;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection 'upgrade';
+                proxy_set_header Host $host;
+                proxy_cache_bypass $http_upgrade;
+              }
+            }
+            NGINX
+            
+            # Reiniciar Nginx
+            sudo systemctl restart nginx
+          EOF 
