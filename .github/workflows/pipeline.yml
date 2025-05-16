@@ -41,6 +41,7 @@ jobs:
       - name: Generar informe de cobertura de código
         run: |
           cd backend
+          mkdir -p coverage
           npm run test:coverage || echo "No hay script de cobertura configurado, crea un script en package.json"
       
       - name: Subir informe de cobertura como artefacto
@@ -57,7 +58,8 @@ jobs:
           npm run build
   
   deploy-to-ec2:
-    if: github.event_name == 'push' && github.event.pull_request != null
+    # Ejecutar en push a cualquier rama co
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
     needs: build-and-test
     runs-on: ubuntu-latest
     

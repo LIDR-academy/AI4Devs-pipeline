@@ -28,3 +28,13 @@ Durante la ejecución del pipeline, tengo el siguiente error:
 Construir imagen Docker
 buildx failed with: ERROR: failed to solve: failed to read dockerfile: open Dockerfile: no such file or directory
 ___
+# Prompt 7
+Elimina el paso de construcción Docker
+___
+# Prompt 8
+En la nueva ejecución del pipeline obtengo el siguiente warning:
+
+build-and-test
+No files were found with the provided path: backend/coverage/. No artifacts will be uploaded.
+
+Además, veo que no se ha ejecutado el job 'deploy-to-ec2'. Debería haberlo hecho, porque se ha producido un push a una rama con un pull request abierto
