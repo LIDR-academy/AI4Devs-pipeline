@@ -1,0 +1,83 @@
+name: Backend CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - '**'
+    paths:
+      - 'backend/**'
+
+jobs:
+  check_pr:
+    runs-on: ubuntu-latest
+    outputs:
+      has_pr: ${{ steps.check_pr.outputs.has_pr }}
+    steps:
+      - name: Check if branch has open PR
+        id: check_pr
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { data: pullRequests } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              head: `${context.repo.owner}:${context.ref.replace('refs/heads/', '')}`
+            });
+            const hasPR = pullRequests.length > 0;
+            console.log(`Branch has open PR: ${hasPR}`);
+            return core.setOutput('has_pr', hasPR);
+
+  test_and_build:
+    needs: check_pr
+    if: ${{ needs.check_pr.outputs.has_pr == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build application
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-build
+          path: backend/dist/
+          retention-days: 1
+
+  deploy:
+    needs: test_and_build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: backend-build
+          path: backend-build
+
+      - name: Deploy to EC2
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.HOST_DNS }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "backend-build/*"
+          target: ${{ secrets.TARGET_DIR }}
+          strip_components: 1
