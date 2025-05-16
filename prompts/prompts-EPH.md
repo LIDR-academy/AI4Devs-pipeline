@@ -45,3 +45,49 @@ Please generate a GitHub Actions workflow file named \`.github/workflows/pipelin
 
 Please generate the full content of the \`pipeline.yml\` file accordingly.
 ````
+
+## Prompt 2
+
+````md
+# PR Description Summary
+
+I have made a set of changes in the current branch. Please analyze the full diff and provide a clear and concise Pull Request description that includes the following:
+
+## ✅ Required Output
+
+1. **Summary of the Changes**:
+   - A high-level overview of what was modified, added, removed, or refactored.
+   - Mention affected components, files, or features.
+
+2. **Reasoning Behind the Changes**:
+   - Why each significant change was made.
+   - What problems or limitations the changes address.
+
+3. **Any Relevant Context or Considerations**:
+   - Mention any known side effects, breaking changes, or considerations for reviewers.
+   - If applicable, include links to related issues, tickets, or discussions.
+
+## 💡 Format
+
+Please output the result in well-structured Markdown, using sections such as:
+
+\`\`\`markdown
+## Summary
+
+...
+
+## Rationale
+
+...
+
+## Additional Context
+
+...
+\`\`\`
+
+The goal is to help other developers understand **what** was changed and **why**, in order to facilitate an effective review and improve project documentation.
+
+---
+
+Only use information that can be inferred from the code changes and existing comments. Avoid making assumptions beyond what is available in the diff.
+````
