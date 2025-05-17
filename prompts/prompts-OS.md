@@ -63,3 +63,35 @@ Keep just the file @ci.yml where all the workflow will be and remove the @pipeli
 **Prompt 10:**
 You did not remove all the artefact logic in the file so we still have the same issue, take care of removing all the related parts
 
+**Prompt 11:**
+I now have this error during deploy application step:
+ssh ***@*** << 'EOF'
+    cd ~/backend
+    npm install --production
+    pm2 stop backend || true
+    pm2 start index.js --name backend
+    pm2 save
+  EOF
+  shell: /usr/bin/bash -e {0}
+  env:
+    AWS_DEFAULT_REGION: ***
+    AWS_REGION: ***
+    AWS_ACCESS_KEY_ID: ***
+    AWS_SECRET_ACCESS_KEY: ***
+    SSH_AUTH_SOCK: /tmp/ssh-lLyORoR7TPvr/agent.2183
+    SSH_AGENT_PID: 2184
+Pseudo-terminal will not be allocated because stdin is not a terminal.
+   ,     #_
+   ~\_  ####_        Amazon Linux 2023
+  ~~  \_#####\
+  ~~     \###|
+  ~~       \#/ ___   https://aws.amazon.com/linux/amazon-linux-2023
+   ~~       V~' '->
+    ~~~         /
+      ~~._.   _/
+         _/ _/
+       _/m/'
+-bash: line 2: npm: command not found
+-bash: line 3: pm2: command not found
+-bash: line 4: pm2: command not found
+-bash: line 5: pm2: command not found
