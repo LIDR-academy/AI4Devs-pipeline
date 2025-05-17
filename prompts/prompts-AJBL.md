@@ -101,3 +101,49 @@ El usuario quiere añadir un paso para desplegar el backend en una instancia EC2
 4.  **Explicar detalladamente la configuración y los comandos al usuario.**
 5.  **Recordar al usuario que configure los secretos en GitHub.**
 ```
+
+### Paso 4 (Revisión 1): Simplificación del Despliegue en EC2 y Configuración de Nginx
+
+**Contexto:** El usuario solicitó simplificar la sección de despliegue en EC2 del pipeline y luego integrar Nginx como proxy inverso.
+
+**Prompt del usuario (implícito y explícito):**
+
+```
+Valora si el workflow de github actions para desplegar en EC2 es muy complejo y se puede simplificar.
+Configura un servidor ngnix como proxy inverso en el pipeline @pipeline-AJBL.yml
+Adapta la forma del despliegue de EC2 siguiente este recurso web: @https://lightrains.com/blogs/deploy-aws-ec2-using-github-actions/
+```
+
+**Prompt interno (mi pensamiento/plan para esta revisión):**
+
+```
+El usuario considera que el job `deploy-backend` original es complejo y quiere simplificarlo usando acciones de GitHub Marketplace, además de añadir Nginx y adaptar el estilo de una acción.
+
+**1. Simplificación del Despliegue (usando `easingthemes/ssh-deploy` y `appleboy/ssh-action`):**
+    a.  Identificar acciones adecuadas: `easingthemes/ssh-deploy` para la copia de archivos y `appleboy/ssh-action` para la ejecución de comandos remotos.
+    b.  Refactorizar el job `deploy-backend`:
+        i.  Mover variables de entorno (`EC2_INSTANCE_IP`, etc.) a nivel de job.
+        ii. Crear un paso "Prepare deployment package" para estructurar localmente lo que se va a copiar (build + package.json/lock).
+        iii. Reemplazar el script `run` largo con el uso de `easingthemes/ssh-deploy` para sincronizar `deploy_package/` a `TARGET_PATH` en EC2.
+        iv.  Usar `appleboy/ssh-action` para ejecutar los comandos de `npm install --production` y `pm2 restart/start`.
+    c.  Explicar los beneficios: YAML más limpio, menos scripting, mayor legibilidad.
+
+**2. Integración de Nginx como Proxy Inverso:**
+    a.  Instruir al usuario para crear un archivo de configuración de Nginx (ej: `ops/nginx/default.conf`) en su repositorio.
+        *   Proporcionar una configuración de ejemplo para Nginx (escuchando en puerto 80, proxy a Node.js en puerto 3010).
+    b.  Modificar el job `deploy-backend` (ya simplificado):
+        i.  Añadir `NGINX_CONFIG_REMOTE_PATH` a las variables de entorno del job.
+        ii. En el paso "Prepare deployment package", copiar también el archivo de configuración de Nginx (`ops/nginx/default.conf`) a `deploy_package/ops/nginx/`.
+        iii. El paso `easingthemes/ssh-deploy` ya copiará este archivo a EC2 dentro de `TARGET_PATH` (ej: `${TARGET_PATH}/ops/nginx/default.conf`).
+        iv.  En el paso `appleboy/ssh-action` (ejecución de comandos remotos):
+            -   Añadir comandos para instalar Nginx (ej: `sudo yum install -y nginx` para Amazon Linux).
+            -   Añadir comandos para copiar el archivo de configuración de Nginx desde donde lo dejó `ssh-deploy` (ej: `${TARGET_PATH}/ops/nginx/default.conf`) a la ruta real de Nginx (ej: `/etc/nginx/conf.d/default.conf`).
+            -   Añadir comandos para validar la configuración (`sudo nginx -t`) y recargar Nginx (`sudo systemctl reload nginx`).
+
+**3. Adaptación al Estilo del Artículo Web (`easingthemes/ssh-deploy`):**
+    a.  Modificar el paso que usa `easingthemes/ssh-deploy` para que sus parámetros se pasen a través de la sección `env:` del paso, en lugar de `with:`.
+    b.  Ajustar nombres de variables de entorno si es necesario para coincidir con el estilo (ej. `EC2_INSTANCE_IP_FROM_SECRETS`).
+    c.  Recordar al usuario la recomendación de usar versiones etiquetadas de las acciones en lugar de `@main` para producción.
+
+4.  Explicar los cambios y recordar los prerrequisitos (secretos de GitHub, configuración de EC2, archivo de configuración de Nginx en el repo).
+```
