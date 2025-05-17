@@ -1,0 +1,121 @@
+name: Backend CI/CD Pipeline
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  test-backend:
+    name: Test Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+
+      - name: Install backend dependencies
+        run: npm install
+        working-directory: ./backend
+
+      - name: Run backend tests
+        run: npm test
+        working-directory: ./backend
+
+  build-backend:
+    name: Build Backend
+    runs-on: ubuntu-latest
+    needs: test-backend # Asegura que los tests pasen antes de construir
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+
+      - name: Install backend dependencies
+        run: npm install
+        working-directory: ./backend
+
+      - name: Build backend application
+        run: npm run build
+        working-directory: ./backend
+
+      - name: Upload backend build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-build # Nombre del artefacto
+          path: backend/dist/ # Directorio a empaquetar
+
+  deploy-backend:
+    name: Deploy Backend to EC2
+    runs-on: ubuntu-latest
+    needs: build-backend # Asegura que el build se complete antes de desplegar
+    # Nota: Este job se ejecutará en cada push a un PR abierto con este trigger.
+    # Considera si quieres que esto ocurra solo al hacer merge a 'main' o a una rama específica.
+    # Ejemplo para desplegar solo en merge a main:
+    # if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.base_ref == 'main'
+    steps:
+      - name: Checkout code # Necesario para package.json y package-lock.json
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }} # Ej: us-east-1
+
+      - name: Download backend build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-build # Nombre del artefacto definido en el job de build
+          path: ./backend-build-artifact # Directorio donde se descargará el artefacto (contendrá la carpeta dist)
+
+      - name: Deploy to EC2 instance
+        env:
+          EC2_INSTANCE_IP: ${{ secrets.EC2_INSTANCE_IP }}
+          EC2_USER: ${{ secrets.EC2_USER }} # Ej: ec2-user o ubuntu
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          TARGET_PATH: /srv/lti-backend # Directorio de la aplicación en EC2 (ajusta si es necesario)
+          PM2_APP_NAME: lti-backend # Nombre de tu app en PM2 (ajusta si es necesario)
+        run: |
+          echo "Setting up SSH access..."
+          mkdir -p ~/.ssh
+          echo "${EC2_SSH_KEY}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          # Descomenta la siguiente línea y reemplaza $EC2_INSTANCE_IP para añadir automáticamente la huella del host EC2.
+          # Es más seguro que StrictHostKeyChecking=no, pero necesita que la IP sea estable.
+          # ssh-keyscan -H "${EC2_INSTANCE_IP}" >> ~/.ssh/known_hosts
+
+          echo "Creating application directory on EC2..."
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${EC2_USER}@${EC2_INSTANCE_IP} "mkdir -p ${TARGET_PATH}"
+
+          echo "Copying application files to EC2..."
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ./backend/package.json ./backend/package-lock.json ${EC2_USER}@${EC2_INSTANCE_IP}:${TARGET_PATH}/
+          # El artefacto backend-build-artifact contiene la carpeta 'dist', la copiamos dentro de TARGET_PATH
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -r ./backend-build-artifact/* ${EC2_USER}@${EC2_INSTANCE_IP}:${TARGET_PATH}/
+
+          echo "Installing dependencies and restarting application on EC2..."
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${EC2_USER}@${EC2_INSTANCE_IP} << EOF
+            cd ${TARGET_PATH}
+            echo "Current directory on EC2: $(pwd)"
+            echo "Files in current directory: $(ls -la)"
+            echo "Node version: $(node -v), NPM version: $(npm -v)"
+
+            echo "Installing production dependencies..."
+            npm install --production
+
+            echo "Restarting application with PM2: ${PM2_APP_NAME}"
+            # Asegúrate que PM2 está instalado globalmente en EC2: sudo npm install -g pm2
+            # Y que tu package.json tiene un script "start" (ej: "node dist/index.js")
+            # PM2 intentará reiniciar ${PM2_APP_NAME}. Si no existe, lo iniciará.
+            pm2 restart ${PM2_APP_NAME} || pm2 start npm --name "${PM2_APP_NAME}" -- run start
+
+            echo "Deployment to EC2 completed."
+          EOF
