@@ -18,3 +18,7 @@ Update @pipeline.yml to change the following data:
 
 **Prompt 3:**
 In your build process I do not see any setup of credentials for AWS to be able to access it, don't you need it?
+
+**Prompt 4:**
+Now I want you to put all the backend tests and the build process into the @ci.yml  file, then you update the @pipeline.yml  to launch only if @ci.yml  file passed 
+
