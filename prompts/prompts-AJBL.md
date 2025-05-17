@@ -2,13 +2,13 @@
 
 ### Paso 1: Configuración del Disparador del Pipeline
 
-**Prompt inicial del usuario:**
+**Prompt inicial del usuario: Cursor + Gemini 2.5 pro**
 
 ```
 Eres un devops profesional. Escanea el proyecto para obtener contexto general antes de proceder a realizar una tarea de despliegue automatizado que te voy a indicar.
 ```
 
-**Prompt del usuario para la tarea específica:**
+**Prompt del usuario para la tarea específica: Cursor + Gemini 2.5 pro**
 
 ```
 Como devops experto. Lee la tarea que tienes que realizar @tarea-pipeline.md y ejecutala segun esta descrita. Pregunta lo que necesites y ve paso por paso explicando lo que vas haciendo. Ten en cuenta que no tengo experiencia como devops y soy desarrollador.
