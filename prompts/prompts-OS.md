@@ -59,3 +59,7 @@ I still have the same related error. Before going further explain me the necessi
 
 **Prompt 9:**
 Keep just the file @ci.yml where all the workflow will be and remove the @pipeline.yml one
+
+**Prompt 10:**
+You did not remove all the artefact logic in the file so we still have the same issue, take care of removing all the related parts
+

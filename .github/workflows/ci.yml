@@ -41,10 +41,12 @@ jobs:
         working-directory: backend
         run: npm test
   
-  build:
-    name: Build Backend
+  build-and-deploy:
+    name: Build and Deploy Backend
     needs: test
     runs-on: ubuntu-latest
+    # Only deploy on push to pipeline-OS branch, not on pull requests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/pipeline-OS'
     
     steps:
       - name: Checkout code
@@ -68,30 +70,6 @@ jobs:
       - name: Build application
         working-directory: backend
         run: npm run build
-        
-      - name: Save build folder for deployment
-        uses: actions/upload-artifact@v2.3.1
-        with:
-          name: backend-build
-          path: backend/dist
-          retention-days: 1
-
-  deploy:
-    name: Deploy to EC2
-    needs: build
-    runs-on: ubuntu-latest
-    # Only deploy on push to pipeline-OS branch, not on pull requests
-    if: github.event_name == 'push' && github.ref == 'refs/heads/pipeline-OS'
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3.5.3
-      
-      - name: Download build artifacts
-        uses: actions/download-artifact@v2
-        with:
-          name: backend-build
-          path: backend/dist
       
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2.2.0
@@ -114,17 +92,14 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.EC2_INSTANCE }} >> ~/.ssh/known_hosts
-      
-      - name: Copy package files for installation
-        run: |
-          cp backend/package.json backend/dist/
-          cp backend/package-lock.json backend/dist/
           
       - name: Copy files to EC2
         run: |
-          rsync -avz --delete \
-            backend/dist/ \
-            ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_INSTANCE }}:/home/${{ secrets.EC2_USERNAME }}/backend/
+          cd backend
+          # First copy the built files
+          rsync -avz --delete dist/ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_INSTANCE }}:/home/${{ secrets.EC2_USERNAME }}/backend/
+          # Then copy the package files
+          rsync -avz package.json package-lock.json ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_INSTANCE }}:/home/${{ secrets.EC2_USERNAME }}/backend/
       
       - name: Deploy application
         run: |
