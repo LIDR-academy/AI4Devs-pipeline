@@ -33,3 +33,24 @@ Download immutable action package 'actions/setup-node@v3'
   Source commit SHA: 3235b876344d2a9aa001b8d1453c930bba69e610
 Error: Missing download info for actions/upload-artifact@v3
 
+**Prompt 7:**
+Now I have this error:
+Current runner version: '2.324.0'
+Operating System
+Runner Image
+Runner Image Provisioner
+GITHUB_TOKEN Permissions
+Secret source: Actions
+Prepare workflow directory
+Prepare all required actions
+Getting action download info
+Download immutable action package 'actions/checkout@v3.5.3'
+  Version: 3.5.3
+  Digest: sha256:0c0e2b3cb7e2e310f95319c83ba4bee44550d54e5e589780e89494c6a6a0f60e
+  Source commit SHA: c85c95e3d7251135ab7dc9ce3241c5835cc595a9
+Download immutable action package 'actions/setup-node@v3'
+  Version: 3.9.1
+  Digest: sha256:d8c8dbd6e63927801f9de42620f961a361b03be6034dcc11e83ca01f50cb9f40
+  Source commit SHA: 3235b876344d2a9aa001b8d1453c930bba69e610
+Error: Missing download info for actions/upload-artifact@v3.1.3
+
