@@ -54,3 +54,8 @@ Download immutable action package 'actions/setup-node@v3'
   Source commit SHA: 3235b876344d2a9aa001b8d1453c930bba69e610
 Error: Missing download info for actions/upload-artifact@v3.1.3
 
+**Prompt 8:**
+I still have the same related error. Before going further explain me the necessity of the step to build artifacts. What is an artifact, what it is usefull for? Can we remove this step?
+
+**Prompt 9:**
+Keep just the file @ci.yml where all the workflow will be and remove the @pipeline.yml one

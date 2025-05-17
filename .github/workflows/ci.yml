@@ -1,4 +1,4 @@
-name: Backend CI
+name: Backend CI/CD Pipeline
 
 on:
   push:
@@ -68,12 +68,70 @@ jobs:
       - name: Build application
         working-directory: backend
         run: npm run build
-      
-      - name: Upload build artifacts
+        
+      - name: Save build folder for deployment
         uses: actions/upload-artifact@v2.3.1
         with:
           name: backend-build
-          path: |
-            backend/dist
-            backend/package.json
-            backend/package-lock.json
+          path: backend/dist
+          retention-days: 1
+
+  deploy:
+    name: Deploy to EC2
+    needs: build
+    runs-on: ubuntu-latest
+    # Only deploy on push to pipeline-OS branch, not on pull requests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/pipeline-OS'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3.5.3
+      
+      - name: Download build artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: backend-build
+          path: backend/dist
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2.2.0
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_VALUE }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      
+      - name: Get EC2 instance information
+        run: |
+          echo "Getting EC2 instance details"
+          aws ec2 describe-instances --instance-ids ${{ secrets.EC2_INSTANCE_ID }} --query 'Reservations[*].Instances[*].{State:State.Name,PublicDnsName:PublicDnsName}' --output json
+      
+      - name: Install SSH key
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+      
+      - name: Setup known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.EC2_INSTANCE }} >> ~/.ssh/known_hosts
+      
+      - name: Copy package files for installation
+        run: |
+          cp backend/package.json backend/dist/
+          cp backend/package-lock.json backend/dist/
+          
+      - name: Copy files to EC2
+        run: |
+          rsync -avz --delete \
+            backend/dist/ \
+            ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_INSTANCE }}:/home/${{ secrets.EC2_USERNAME }}/backend/
+      
+      - name: Deploy application
+        run: |
+          ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_INSTANCE }} << 'EOF'
+            cd ~/backend
+            npm install --production
+            pm2 stop backend || true
+            pm2 start index.js --name backend
+            pm2 save
+          EOF
