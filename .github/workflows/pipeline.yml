@@ -1,9 +1,6 @@
 name: Backend CI/CD Pipeline
 
 on:
-  push:
-    branches:
-      - pipeline-OS
   pull_request:
     types: [opened, synchronize, reopened]
     branches:
