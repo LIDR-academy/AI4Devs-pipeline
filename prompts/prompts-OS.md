@@ -22,3 +22,14 @@ In your build process I do not see any setup of credentials for AWS to be able t
 **Prompt 4:**
 Now I want you to put all the backend tests and the build process into the @ci.yml  file, then you update the @pipeline.yml  to launch only if @ci.yml  file passed 
 
+**Prompt 5:**
+check @ci.yml and @pipeline.yml because now no action is triggered
+
+**Prompt 6:**
+It now triggers fine, I have this issue: 
+Download immutable action package 'actions/setup-node@v3'
+  Version: 3.9.1
+  Digest: sha256:d8c8dbd6e63927801f9de42620f961a361b03be6034dcc11e83ca01f50cb9f40
+  Source commit SHA: 3235b876344d2a9aa001b8d1453c930bba69e610
+Error: Missing download info for actions/upload-artifact@v3
+
