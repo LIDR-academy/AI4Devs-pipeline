@@ -20,4 +20,8 @@ Update @pipeline.yml to change the following data:
 In your build process I do not see any setup of credentials for AWS to be able to access it, don't you need it?
 
 **Prompt 4:**
+Now in the github actions I have this error:
+Error
+No event triggers defined in `on`
+
 

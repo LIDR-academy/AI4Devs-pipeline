@@ -3,19 +3,17 @@ name: Backend CI/CD Pipeline
 on:
   push:
     branches:
-      - 'pipeline-OS'
-    paths:
-      - 'backend/**'
+      - pipeline-OS
   pull_request:
     types: [opened, synchronize, reopened]
-    paths:
-      - 'backend/**'
+    branches:
+      - pipeline-OS
 
 jobs:
   test:
     name: Test Backend
-    # Only run on pushes to branches with open PRs
-    if: github.event_name == 'push' && github.event.pull_request != null
+    # Run for branches with open PRs
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     
     steps:
