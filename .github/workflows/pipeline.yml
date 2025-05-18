@@ -82,13 +82,16 @@ jobs:
 
       - name: Deploy to EC2
         run: |
-          ssh ec2 'sudo apt-get update && \
-          sudo apt-get install -y git && \
+          ssh ec2 'sudo yum update -y && \
+          sudo yum install -y git && \
           mkdir -p /home/${{ secrets.EC2_USER }}/backend && \
           cd /home/${{ secrets.EC2_USER }}/backend && \
           git clone ${{ secrets.REPO_URL }} . || git pull && \
-          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && \
-          sudo apt-get install -y nodejs && \
-          sudo npm install -g pm2 && \
+          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash && \
+          export NVM_DIR="$HOME/.nvm" && \
+          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" && \
+          nvm install 20 && \
+          nvm use 20 && \
+          npm install -g pm2 && \
           npm install && \
           pm2 restart backend || pm2 start npm --name "backend" -- start' 
