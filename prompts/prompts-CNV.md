@@ -151,6 +151,15 @@ No modifiques ninguna otra parte del código
 
 ---
 
-[2024-03-19 - GPT-4] que ha pasado con los prompts?
+[2024-03-19 - GPT-4] No es posible que las dependiencias vayan instaladas ya desde el paquete que viene de github?
 
 ---
+
+[2024-03-19 - GPT-4] Si, por favor
+
+---
+
+[2024-03-19 - GPT-4] pero sigue estando dentro de deploy to EC2, no deberia de estar ahi verdad? Deberia estar en build backend
+
+---
+

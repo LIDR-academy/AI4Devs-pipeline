@@ -44,7 +44,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
       
-      - name: Install Dependencies
+      - name: Install Dependencies Locally
         working-directory: ./backend
         run: npm ci
       
@@ -53,7 +53,7 @@ jobs:
         run: npm run build
 
   deploy:
-    name: Deploy to EC2
+    name: Deploy Backend to EC2
     needs: build
     runs-on: ubuntu-latest
     
@@ -73,14 +73,6 @@ jobs:
             StrictHostKeyChecking no
           END
 
-      - name: Install Docker on EC2
-        run: |
-          ssh ec2 'sudo apt update && sudo apt install -y docker.io && sudo usermod -aG docker $USER'
-
-      - name: Install Node.js and npm on EC2
-        run: |
-          ssh ec2 'curl -sL https://deb.nodesource.com/setup_16.x | sudo -E bash - && sudo apt install -y nodejs'
-
       - name: Copy Backend to EC2
         run: |
           ssh ec2 'mkdir -p ${{ secrets.TARGET_DIR }}'
@@ -90,6 +82,5 @@ jobs:
         run: |
           ssh ec2 '
             cd ${{ secrets.TARGET_DIR }} && \
-            npm install && \
-            npm run build
+            npm start
           '
