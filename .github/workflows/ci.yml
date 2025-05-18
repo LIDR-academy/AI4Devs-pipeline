@@ -1,0 +1,82 @@
+name: Backend CI/CD
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    branches:
+      - '**'
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      
+      - name: Install Dependencies
+        working-directory: ./backend
+        run: npm ci
+      
+      - name: Run Tests
+        working-directory: ./backend
+        run: npm test
+
+  build:
+    name: Build Backend
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      
+      - name: Install Dependencies
+        working-directory: ./backend
+        run: npm ci
+      
+      - name: Build
+        working-directory: ./backend
+        run: npm run build
+
+  deploy:
+    name: Deploy to EC2
+    needs: build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          cat >>~/.ssh/config <<END
+          Host ec2
+            HostName ${{ secrets.HOST_DNS }}
+            User ${{ secrets.USERNAME }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+          END
+      
+      - name: Deploy to EC2
+        run: |
+          ssh ec2 'cd ${{ secrets.TARGET_DIR }} && \
+          docker build -t backend:latest . && \
+          docker stop backend || true && \
+          docker rm backend || true && \
+          docker run -d --name backend -p 3010:3010 backend:latest'
