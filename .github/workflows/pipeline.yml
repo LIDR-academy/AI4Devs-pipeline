@@ -4,8 +4,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     branches:
-      - 'pipeline-JCC' # incluir rama de trabajo
-      - '!main' # Excluir rama principal
+      - pipeline-JCC
 
 jobs:
   test:
