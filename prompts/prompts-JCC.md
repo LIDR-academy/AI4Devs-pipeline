@@ -1,4 +1,4 @@
-# Lista de Prompts
+# Lista de Prompts para pipeline
 > Modelo de IA utilizado: Claude-3-Sonnet
 
 ## Prompt 1: Análisis del proyecto backend
@@ -85,7 +85,7 @@ Error: Process completed with exit code 127.
 ## Prompt 9: Corrección de comandos para Amazon Linux
 
 ```
-Ahora me sale este nuevo error:
+Estoy teniendo estos nuevos errores:
 
 Run ssh ec2 'sudo apt-get update && \
 Warning: Permanently added '***' (ED25519) to the list of known hosts.
@@ -104,4 +104,25 @@ Necesitamos optimizar el despliegue para:
 1. Usar los archivos del build en lugar de clonar el repositorio
 2. Configurar correctamente los permisos en la instancia EC2
 3. Asegurar que el usuario tenga los permisos necesarios para ejecutar npm y pm2
+```
+
+## Prompt 11: Corrección de errores de TypeScript y Prisma en el pipeline
+
+```
+Estoy teniendo problemas con errores de TypeScript y Prisma en mi pipeline de GitHub Actions. Los errores son:
+
+1. Errores de tipado implícito en positionService.ts:
+   - Parámetro 'app' sin tipo definido
+   - Parámetro 'step' sin tipo definido
+
+2. Errores de Prisma en Candidate.ts:
+   - Propiedad 'PrismaClientInitializationError' no encontrada en el tipo 'Prisma'
+
+El pipeline funciona en la primera ejecución pero falla en las siguientes. Necesito:
+1. Corregir los tipos en los archivos TypeScript
+2. Asegurar que los tipos de Prisma se generen correctamente antes del build
+3. Modificar el pipeline para incluir la generación de tipos de Prisma
+4. Actualizar la configuración de TypeScript para incluir las librerías necesarias
+
+¿Puedes ayudarme a resolver estos problemas?
 ```
