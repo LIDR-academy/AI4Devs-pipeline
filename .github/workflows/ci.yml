@@ -73,15 +73,12 @@ jobs:
             StrictHostKeyChecking no
           END
 
-      - name: Copy Backend to EC2
-        run: |
-          ssh ec2 'mkdir -p ${{ secrets.TARGET_DIR }}'
-          scp -r ./backend/* ec2:${{ secrets.TARGET_DIR }}
-
-
       - name: Deploy Backend to EC2
         run: |
-          cd ${{ secrets.TARGET_DIR }} && \
-          pwd && \
-          npm start
-        '
+          ssh ec2 '
+            mkdir -p ${{ secrets.TARGET_DIR }} && \
+            scp -r ./backend/* ec2:${{ secrets.TARGET_DIR }} && \
+            cd ${{ secrets.TARGET_DIR }} && \
+            npm start
+          '
+
