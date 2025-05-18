@@ -84,14 +84,21 @@ jobs:
         run: |
           ssh ec2 'sudo yum update -y && \
           sudo yum install -y git && \
+          rm -rf /home/${{ secrets.EC2_USER }}/backend && \
           mkdir -p /home/${{ secrets.EC2_USER }}/backend && \
           cd /home/${{ secrets.EC2_USER }}/backend && \
-          git clone ${{ secrets.REPO_URL }} . || git pull && \
           curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash && \
-          export NVM_DIR="$HOME/.nvm" && \
-          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" && \
+          . ~/.nvm/nvm.sh && \
           nvm install 20 && \
           nvm use 20 && \
-          npm install -g pm2 && \
-          npm install && \
+          npm install -g pm2'
+
+      - name: Copy build files
+        run: |
+          scp -r ./backend/dist/* ec2:/home/${{ secrets.EC2_USER }}/backend/
+
+      - name: Start application
+        run: |
+          ssh ec2 'cd /home/${{ secrets.EC2_USER }}/backend && \
+          npm install --production && \
           pm2 restart backend || pm2 start npm --name "backend" -- start' 
