@@ -106,3 +106,43 @@ No modifiques ninguna otra parte del código
 
 ---
 
+[2024-03-19 - Claude-3-Sonnet] Si, ahora estan pasando correctamente. Ahora se queja en la parte de Deploy EC2 que no encuentra docker
+
+---
+
+[2024-03-19 - Claude-3-Sonnet] la instalacion de docker deberia de hacerse desde el workflow
+
+---
+
+[2024-03-19 - Claude-3-Sonnet] Si, añade un paso al workflow para instalar docker en la instancia de EC2
+
+---
+
+[2024-03-19 - Claude-3-Sonnet] Este es el error que muestra
+
+---
+
+[2024-03-19 - Claude-3-Sonnet] Ubica el dockerfile
+
+---
+
+
+[2024-03-19 - Claude-3-Sonnet] intenta ubicarlos de nuevo escaneando toda la estructura del proyecto
+
+---
+
+[2024-03-19 - Claude-3-Sonnet] el docker-compose no es válido para lo que intentamos?
+
+---
+
+[2024-03-19 - Claude-3-Sonnet] Es decir que en esta app sólo esta containerizado la parte de base de datos verdad?
+
+---
+
+[2024-03-19 - Claude-3-Sonnet] Entonces porque en el archivo de workflow intentas ejecutar el backend como si estuviera containerizado cuando no lo esta?
+
+---
+
+[2024-03-19 - Claude-3-Sonnet] Si, por favor. Acuerdate de la parte de prompts en las cursor rules
+
+---
