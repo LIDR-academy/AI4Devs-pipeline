@@ -91,6 +91,5 @@ jobs:
           ssh ec2 '
             cd ${{ secrets.TARGET_DIR }} && \
             npm install && \
-            npm run build && \
-            npm start
+            npm run build
           '
