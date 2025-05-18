@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Cuando estes ejecutando comandos concatenados, no utilices el operador && porque estamos en windows, utiliza ";"
