@@ -77,6 +77,10 @@ jobs:
         run: |
           ssh ec2 'sudo apt update && sudo apt install -y docker.io && sudo usermod -aG docker $USER'
 
+      - name: Install Node.js and npm on EC2
+        run: |
+          ssh ec2 'curl -sL https://deb.nodesource.com/setup_16.x | sudo -E bash - && sudo apt install -y nodejs'
+
       - name: Copy Backend to EC2
         run: |
           ssh ec2 'mkdir -p ${{ secrets.TARGET_DIR }}'

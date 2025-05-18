@@ -146,3 +146,11 @@ No modifiques ninguna otra parte del código
 [2024-03-19 - Claude-3-Sonnet] Si, por favor. Acuerdate de la parte de prompts en las cursor rules
 
 ---
+
+[2024-03-19 - GPT-4] Ahora nos falta el paquete npm
+
+---
+
+[2024-03-19 - GPT-4] que ha pasado con los prompts?
+
+---
