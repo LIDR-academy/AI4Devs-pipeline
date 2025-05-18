@@ -82,7 +82,9 @@ jobs:
 
       - name: Deploy to EC2
         run: |
-          ssh ec2 'cd /path/to/project && \
-          git pull && \
+          ssh ec2 'mkdir -p /home/${{ secrets.EC2_USER }}/backend && \
+          cd /home/${{ secrets.EC2_USER }}/backend && \
+          git clone ${{ secrets.REPO_URL }} . || git pull && \
           npm install && \
+          npm install -g pm2 && \
           pm2 restart backend || pm2 start npm --name "backend" -- start' 
