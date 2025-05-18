@@ -57,3 +57,51 @@ Generación del build del backend.
 Despliegue del backend en EC2.
 Asegúrate de que el pipeline se dispare con un push a una rama con un Pull Request abierto.
 ```
+
+## Prompt 7: Corrección de trigger en GitHub Actions
+
+```
+Tengo este error en github actions:
+
+Error
+No event triggers defined in `on`
+
+Creo que se debe cambiar la acción para que se ejecute cuando se haga push, puedes verificar esto ?
+```
+
+## Prompt 8: Corrección de errores en el despliegue EC2
+
+```
+Ahora tengo este error en github actions:
+
+Run ssh ec2 'mkdir -p /home/***/backend && \
+Warning: Permanently added '***' (ED25519) to the list of known hosts.
+bash: line 3: git: command not found
+bash: line 3: git: command not found
+bash: line 6: pm2: command not found
+Error: Process completed with exit code 127.
+```
+
+## Prompt 9: Corrección de comandos para Amazon Linux
+
+```
+Ahora me sale este nuevo error:
+
+Run ssh ec2 'sudo apt-get update && \
+Warning: Permanently added '***' (ED25519) to the list of known hosts.
+sudo: apt-get: command not found
+bash: line 5: git: command not found
+bash: line 10: pm2: command not found
+Error: Process completed with exit code 127.
+
+El error ocurre porque la instancia EC2 está usando Amazon Linux en lugar de Ubuntu, por lo que los comandos apt-get no funcionan. Se necesita usar yum en su lugar y configurar Node.js usando NVM.
+```
+
+## Prompt 10: Optimización del despliegue y permisos
+
+```
+Necesitamos optimizar el despliegue para:
+1. Usar los archivos del build en lugar de clonar el repositorio
+2. Configurar correctamente los permisos en la instancia EC2
+3. Asegurar que el usuario tenga los permisos necesarios para ejecutar npm y pm2
+```
