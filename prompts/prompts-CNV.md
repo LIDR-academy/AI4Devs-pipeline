@@ -90,3 +90,15 @@ No modifiques ninguna otra parte del código
 
 ---
 
+[2024-03-19 - Claude-3-Sonnet] En el deployment da error en el paso Deploy to EC2. Tiene problemas al cambiar a la ruta de Target _DIR
+
+---
+
+[2024-03-19 - Claude-3-Sonnet] Si estamos en el proceso de hacer un workflow en el momento que se hace una pull request, cual de las 2 opciones crees que es la mas adecuada? Solo dila, no la implementes
+
+---
+
+[2024-03-19 - Claude-3-Sonnet] En el último paso de Deploy to EC2, ¿qué simbolizan las \\ y los ;? Recuerda que en ese momento estamos en Linux
+
+---
+

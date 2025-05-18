@@ -72,11 +72,16 @@ jobs:
             IdentityFile ~/.ssh/deploy_key
             StrictHostKeyChecking no
           END
-      
+
+      - name: Copy Backend to EC2
+        run: |
+          ssh ec2 'mkdir -p ${{ secrets.TARGET_DIR }}'
+          scp -r ./backend/* ec2:${{ secrets.TARGET_DIR }}
+
       - name: Deploy to EC2
         run: |
-          ssh ec2 'cd ${{ secrets.TARGET_DIR }} && \
-          docker build -t backend:latest . && \
-          docker stop backend || true && \
-          docker rm backend || true && \
+          ssh ec2 'cd ${{ secrets.TARGET_DIR }}; \
+          docker build -t backend:latest .; \
+          docker stop backend || true; \
+          docker rm backend || true; \
           docker run -d --name backend -p 3010:3010 backend:latest'
