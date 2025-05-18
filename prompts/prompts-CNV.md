@@ -102,3 +102,7 @@ No modifiques ninguna otra parte del código
 
 ---
 
+[2024-03-19 - Claude-3-Sonnet] Ha habido un cambio en la parte de tests? Ahora están dando errores
+
+---
+
