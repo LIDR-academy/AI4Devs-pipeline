@@ -31,9 +31,6 @@ para la EC2\_SSH\_KEY, hay que rellenar el secreto con el contenido del fichero 
 ## Chatbot: Cursor (Sonnet 3.5)
 
 
-# Prompts Inferidos
-
-
 [2025-05-18 - Claude-3-Sonnet] Chequea los archivos del proyecto y haz un resumen del contexto
 
 ---
