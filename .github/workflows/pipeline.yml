@@ -18,9 +18,9 @@ jobs:
       postgres:
         image: postgres
         env:
-          POSTGRES_PASSWORD: password    # Cambiar por contraseña segura para tests
-          POSTGRES_USER: postgres        # Usuario para pruebas
-          POSTGRES_DB: test_db           # Nombre de DB para pruebas
+          POSTGRES_PASSWORD: D1ymf8wyQEGthFR1E9xhCq  # Debe coincidir con schema.prisma
+          POSTGRES_USER: LTIdbUser                   # Debe coincidir con schema.prisma
+          POSTGRES_DB: LTIdb                         # Debe coincidir con schema.prisma
         ports:
           - 5432:5432
         # Opciones de salud para asegurar que PostgreSQL esté listo
@@ -48,7 +48,7 @@ jobs:
       - name: Configurar variables de entorno para pruebas
         working-directory: ./backend
         run: |
-          echo "DATABASE_URL=postgresql://postgres:password@localhost:5432/test_db" > .env
+          echo "DATABASE_URL=postgresql://LTIdbUser:D1ymf8wyQEGthFR1E9xhCq@localhost:5432/LTIdb" > .env
       
       - name: Ejecutar migraciones de Prisma
         working-directory: ./backend
