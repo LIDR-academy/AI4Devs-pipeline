@@ -62,7 +62,7 @@ jobs:
     name: Build y Despliegue en EC2
     needs: test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    if: github.event_name == 'push'
     
     steps:
       - name: Checkout del código
@@ -86,22 +86,25 @@ jobs:
       - name: Configurar clave SSH para EC2
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/ec2_key.pem
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key.pem
           chmod 600 ~/.ssh/ec2_key.pem
-          echo -e "Host ec2\n\tHostName ${{ secrets.EC2_INSTANCE }}\n\tUser ${{ secrets.EC2_USER }}\n\tIdentityFile ~/.ssh/ec2_key.pem\n\tStrictHostKeyChecking no" > ~/.ssh/config
+          echo -e "Host ec2\n\tHostName ${{ secrets.EC2_HOST }}\n\tUser ${{ secrets.EC2_USER }}\n\tIdentityFile ~/.ssh/ec2_key.pem\n\tStrictHostKeyChecking no" > ~/.ssh/config
       
-      - name: Crear y transferir artefactos
+      - name: Crear y transferir paquete de despliegue
         working-directory: ./backend
         run: |
-          # Crear paquete de despliegue
           tar -czf backend-deploy.tar.gz dist node_modules package.json package-lock.json prisma
-          
-          # Transferir a EC2
           scp backend-deploy.tar.gz ec2:~/
       
-      - name: Ejecutar despliegue en EC2
+      - name: Desplegar en EC2
         run: |
           ssh ec2 '
+            # Instalar pm2 si no está instalado
+            if ! command -v pm2 &> /dev/null; then
+              echo "Instalando pm2..."
+              npm install -g pm2
+            fi
+            
             # Detener servicio si está en ejecución
             pm2 stop backend || true
             
