@@ -86,9 +86,9 @@ jobs:
       - name: Configurar clave SSH para EC2
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key.pem
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/ec2_key.pem
           chmod 600 ~/.ssh/ec2_key.pem
-          echo -e "Host ec2\n\tHostName ${{ secrets.EC2_HOST }}\n\tUser ${{ secrets.EC2_USER }}\n\tIdentityFile ~/.ssh/ec2_key.pem\n\tStrictHostKeyChecking no" > ~/.ssh/config
+          echo -e "Host ec2\n\tHostName ${{ secrets.EC2_INSTANCE }}\n\tUser ${{ secrets.EC2_USER }}\n\tIdentityFile ~/.ssh/ec2_key.pem\n\tStrictHostKeyChecking no" > ~/.ssh/config
       
       - name: Crear y transferir paquete de despliegue
         working-directory: ./backend
