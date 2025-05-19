@@ -19,6 +19,12 @@ Este proyecto es una aplicación full-stack con un frontend en React y un backen
   - `src/`: Contiene el código fuente para el frontend.
   - `public/`: Contiene archivos estáticos como el archivo HTML e imágenes.
   - `build/`: Contiene la construcción lista para producción del frontend.
+- `.github/workflows/`: Contiene los archivos de configuración para GitHub Actions CI/CD.
+  - `ci.yml`: Configuración del pipeline de CI/CD para el backend.
+- `scripts/`: Contiene scripts de despliegue y utilidades.
+  - `deploy.sh`: Script para el despliegue en EC2.
+- `docs/`: Contiene documentación adicional.
+  - `pipeline.md`: Documentación detallada del pipeline de CI/CD.
 - `.env`: Contiene las variables de entorno.
 - `docker-compose.yml`: Contiene la configuración de Docker Compose para gestionar los servicios de tu aplicación.
 - `README.md`: Este archivo, contiene información sobre el proyecto e instrucciones sobre cómo ejecutarlo.
@@ -160,6 +166,36 @@ POST http://localhost:3010/candidates
 }
 ```
 
+## Pipeline de CI/CD
+
+Este proyecto incluye un pipeline de CI/CD configurado con GitHub Actions que automatiza el proceso de pruebas, compilación y despliegue en una instancia EC2 de AWS.
+
+### Funcionamiento del Pipeline
+
+El pipeline se dispara en dos escenarios:
+1. Cuando se hace un push a una rama con un Pull Request abierto hacia `main`
+2. Cuando se hace un push directo a la rama `main`
+
+El flujo del pipeline es el siguiente:
+- **Test**: Ejecuta las pruebas del backend usando Jest
+- **Build**: Compila el código TypeScript y crea un paquete para despliegue
+- **Deploy**: Despliega el paquete en la instancia EC2 (solo en push a `main`)
+
+Para más detalles sobre el pipeline, consulta la [documentación completa del pipeline](./docs/pipeline.md).
+
+### Configuración de Secretos en GitHub
+
+Para que el pipeline funcione correctamente, debes configurar los siguientes secretos en tu repositorio de GitHub:
+
+1. Ve a tu repositorio > Settings > Secrets and variables > Actions
+2. Agrega los siguientes secretos:
+   - `AWS_ACCESS_KEY_ID`: ID de clave de acceso de AWS
+   - `AWS_SECRET_ACCESS_KEY`: Clave secreta de acceso de AWS
+   - `AWS_REGION`: Región de AWS (ej. us-east-1)
+   - `EC2_SSH_KEY`: Clave SSH privada para conectar a la instancia EC2
+   - `EC2_HOST`: IP o DNS de la instancia EC2
+   - `EC2_USERNAME`: Usuario para conectar a la instancia (ej. ec2-user)
+   - `DATABASE_URL`: URL de conexión a la base de datos PostgreSQL
 
 ## Configuración de EC2 y GitHub Actions
 
@@ -176,7 +212,7 @@ Para ejecutar este proyecto en una instancia EC2 y asegurarte de que GitHub Acti
   - Asegúrate de que el grupo de seguridad asociado a tu instancia permita el tráfico en los siguientes puertos:
     - **22**: Para SSH (acceso remoto).
     - **80**: Para HTTP (si estás usando Nginx o un servidor web).
-    - **8080**: Para el backend (puerto donde se ejecuta tu aplicación).
+    - **3010**: Para el backend (puerto donde se ejecuta tu aplicación).
   - Puedes agregar reglas de entrada en el grupo de seguridad para permitir el acceso desde cualquier IP (0.0.0.0/0) para propósitos de desarrollo, pero considera restringirlo en producción.
 
 3. **Instalar Dependencias en EC2**:
@@ -186,16 +222,17 @@ Para ejecutar este proyecto en una instancia EC2 y asegurarte de que GitHub Acti
     ```
   - Instala Node.js y npm:
     ```
-    curl -sL https://rpm.nodesource.com/setup_16.x | sudo bash -
+    # Para Amazon Linux 2
+    curl -sL https://rpm.nodesource.com/setup_18.x | sudo bash -
     sudo yum install -y nodejs
+
+    # Para Ubuntu
+    curl -sL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+    sudo apt-get install -y nodejs
     ```
-  - Instala PM2 para gestionar tu aplicación:
+  - Crea directorios para la aplicación:
     ```
-    sudo npm install -g pm2
-    ```
-  - Instala Nginx si lo necesitas:
-    ```
-    sudo yum install -y nginx
+    mkdir -p ~/app
     ```
 
 4. **Configurar Variables de Entorno**:
@@ -205,10 +242,58 @@ Para ejecutar este proyecto en una instancia EC2 y asegurarte de que GitHub Acti
     ```
   - Asegúrate de reemplazar `user`, `password` y `mydatabase` con los valores correctos.
 
-### Variables en GitHub Actions
+5. **Configurar PostgreSQL**:
+  - Instala PostgreSQL:
+    ```
+    # Para Amazon Linux 2
+    sudo amazon-linux-extras install postgresql13
+    sudo yum install -y postgresql-server
+    sudo postgresql-setup initdb
+    sudo systemctl start postgresql
+    sudo systemctl enable postgresql
 
-Para que el flujo de trabajo de GitHub Actions funcione correctamente, debes configurar las siguientes variables en los secretos de tu repositorio:
+    # Para Ubuntu
+    sudo apt update
+    sudo apt install postgresql postgresql-contrib
+    ```
+  - Configura el usuario y la base de datos:
+    ```
+    sudo -u postgres psql
+    CREATE USER myuser WITH PASSWORD 'mypassword';
+    CREATE DATABASE mydatabase;
+    GRANT ALL PRIVILEGES ON DATABASE mydatabase TO myuser;
+    ```
 
-1. **AWS_ACCESS_ID**: Tu ID de clave de acceso de AWS.
-2. **AWS_ACCESS_KEY**: Tu clave de acceso secreta de AWS.
-3. **EC2_INSTANCE**: La dirección IP pública o el nombre DNS de tu instancia EC2.
+### Prueba Manual de Despliegue
+
+Para probar manualmente el despliegue antes de usar GitHub Actions:
+
+1. Construye tu aplicación localmente:
+   ```
+   cd backend
+   npm run build
+   ```
+
+2. Crea un paquete de despliegue:
+   ```
+   mkdir -p deployment
+   cp -r dist/ deployment/
+   cp -r prisma/ deployment/
+   cp package.json package-lock.json deployment/
+   cd deployment && npm ci --omit=dev
+   cd .. && tar -czf deployment.tar.gz deployment/
+   ```
+
+3. Copia el paquete a EC2 y despliégalo:
+   ```
+   scp -i your-key.pem deployment.tar.gz ec2-user@your-ec2-ip:/tmp/
+   ssh -i your-key.pem ec2-user@your-ec2-ip
+   
+   # En EC2
+   mkdir -p ~/app
+   tar -xzf /tmp/deployment.tar.gz -C ~/app
+   cd ~/app/deployment
+   node dist/index.js
+   ```
+
+Si todo funciona correctamente, el pipeline de GitHub Actions debería poder realizar el despliegue automáticamente cuando se hace push a la rama main.

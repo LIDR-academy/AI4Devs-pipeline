@@ -1,0 +1,178 @@
+name: Backend CI/CD Pipeline
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/**'
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: '**/package-lock.json'
+
+    - name: Install dependencies
+      working-directory: ./backend
+      run: npm ci
+
+    - name: Generate Prisma client
+      working-directory: ./backend
+      run: npx prisma generate
+
+    - name: Create .env file
+      working-directory: ./backend
+      run: |
+        echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/testdb" > .env
+
+    - name: Run tests
+      working-directory: ./backend
+      run: npm test
+
+  build:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: '**/package-lock.json'
+
+    - name: Install dependencies
+      working-directory: ./backend
+      run: npm ci
+
+    - name: Generate Prisma client
+      working-directory: ./backend
+      run: npx prisma generate
+
+    - name: Build application
+      working-directory: ./backend
+      run: npm run build
+
+    - name: Create deployment package
+      run: |
+        mkdir -p deployment
+        cp -r backend/dist deployment/
+        cp -r backend/prisma deployment/
+        cp backend/package.json deployment/
+        cp backend/package-lock.json deployment/
+        cd deployment && npm ci --omit=dev
+        cp backend/.env deployment/ || echo "No .env file found"
+        tar -czf deployment.tar.gz deployment
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: backend-build
+        path: deployment.tar.gz
+
+  deploy:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Download artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: backend-build
+        path: ./
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Deploy to EC2
+      env:
+        PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+        HOST: ${{ secrets.EC2_HOST }}
+        USER: ${{ secrets.EC2_USERNAME }}
+      run: |
+        echo "$PRIVATE_KEY" > private_key.pem
+        chmod 600 private_key.pem
+        
+        # Copy deployment package to EC2
+        scp -o StrictHostKeyChecking=no -i private_key.pem deployment.tar.gz $USER@$HOST:/tmp/
+        
+        # SSH into the EC2 instance and deploy
+        ssh -o StrictHostKeyChecking=no -i private_key.pem $USER@$HOST << 'EOF'
+          # Stop existing service if it exists
+          sudo systemctl stop backend-app.service || true
+          
+          # Clean up previous deployment
+          rm -rf /home/$USER/app
+          mkdir -p /home/$USER/app
+          
+          # Extract new deployment
+          tar -xzf /tmp/deployment.tar.gz -C /home/$USER/app
+          cd /home/$USER/app/deployment
+          
+          # Set environment variables if not present in .env
+          if [ ! -f .env ]; then
+            echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" > .env
+          fi
+          
+          # Setup service if it doesn't exist
+          if [ ! -f /etc/systemd/system/backend-app.service ]; then
+            echo "[Unit]
+          Description=Node.js Backend Application
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=$USER
+          WorkingDirectory=/home/$USER/app/deployment
+          ExecStart=$(which node) dist/index.js
+          Restart=on-failure
+          Environment=NODE_ENV=production
+
+          [Install]
+          WantedBy=multi-user.target" | sudo tee /etc/systemd/system/backend-app.service
+            
+            sudo systemctl daemon-reload
+            sudo systemctl enable backend-app.service
+          fi
+          
+          # Start the service
+          sudo systemctl start backend-app.service
+        EOF
