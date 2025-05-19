@@ -58,13 +58,12 @@ jobs:
         working-directory: ./backend
         run: npm test
 
-  build:
-    name: Generar Build del Backend
+  deploy:
+    name: Build y Despliegue en EC2
     needs: test
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    # Solo desplegar cuando el PR está abierto y se hace push a la rama
+    if: github.event_name == 'push' && github.event.pull_request
     
     steps:
       - name: Checkout del código
@@ -85,31 +84,6 @@ jobs:
         working-directory: ./backend
         run: npm run build
       
-      - name: Comprimir artefactos
-        working-directory: ./backend
-        run: |
-          tar -czf backend-build.tar.gz dist node_modules package.json package-lock.json prisma
-      
-      - name: Subir artefactos de build
-        uses: actions/upload-artifact@v2
-        with:
-          name: backend-build
-          path: backend/backend-build.tar.gz
-
-  deploy:
-    name: Desplegar en EC2
-    needs: build
-    runs-on: ubuntu-latest
-    # Solo desplegar cuando el PR está abierto y se hace push a la rama
-    if: github.event_name == 'push' && github.event.pull_request
-    
-    steps:
-      - name: Descargar artefactos de build
-        uses: actions/download-artifact@v2
-        with:
-          name: backend-build
-          path: .
-      
       - name: Configurar clave SSH para EC2
         run: |
           mkdir -p ~/.ssh
@@ -117,9 +91,14 @@ jobs:
           chmod 600 ~/.ssh/ec2_key.pem
           echo -e "Host ec2\n\tHostName ${{ secrets.EC2_INSTANCE }}\n\tUser ${{ secrets.EC2_USER }}\n\tIdentityFile ~/.ssh/ec2_key.pem\n\tStrictHostKeyChecking no" > ~/.ssh/config
       
-      - name: Transferir archivos a EC2
+      - name: Crear y transferir artefactos
+        working-directory: ./backend
         run: |
-          scp backend-build.tar.gz ec2:~/
+          # Crear paquete de despliegue
+          tar -czf backend-deploy.tar.gz dist node_modules package.json package-lock.json prisma
+          
+          # Transferir a EC2
+          scp backend-deploy.tar.gz ec2:~/
       
       - name: Ejecutar despliegue en EC2
         run: |
@@ -132,7 +111,7 @@ jobs:
             mkdir -p ~/backend-deployment
             
             # Extraer archivos
-            tar -xzf ~/backend-build.tar.gz -C ~/backend-deployment
+            tar -xzf ~/backend-deploy.tar.gz -C ~/backend-deployment
             
             # Configurar variables de entorno
             echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" > ~/backend-deployment/.env
@@ -142,5 +121,5 @@ jobs:
             pm2 start dist/index.js --name backend
             
             # Limpiar
-            rm ~/backend-build.tar.gz
+            rm ~/backend-deploy.tar.gz
           ' 
