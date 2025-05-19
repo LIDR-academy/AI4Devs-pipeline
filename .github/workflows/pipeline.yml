@@ -62,8 +62,7 @@ jobs:
     name: Build y Despliegue en EC2
     needs: test
     runs-on: ubuntu-latest
-    # Solo desplegar cuando el PR está abierto y se hace push a la rama
-    if: github.event_name == 'push' && github.event.pull_request
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     
     steps:
       - name: Checkout del código
