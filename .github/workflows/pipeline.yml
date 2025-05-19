@@ -1,0 +1,144 @@
+name: Backend CI/CD Pipeline
+
+# Se activa cuando hay un push a cualquier rama que tiene un PR abierto
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - '*'
+
+jobs:
+  test:
+    name: Pruebas de Backend
+    runs-on: ubuntu-latest
+    
+    # Servicios necesarios (PostgreSQL)
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: password    # Cambiar por contraseña segura para tests
+          POSTGRES_USER: postgres        # Usuario para pruebas
+          POSTGRES_DB: test_db           # Nombre de DB para pruebas
+        ports:
+          - 5432:5432
+        # Opciones de salud para asegurar que PostgreSQL esté listo
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v3
+      
+      - name: Configuración de Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'backend/package-lock.json'
+      
+      - name: Instalar dependencias
+        working-directory: ./backend
+        run: npm ci
+      
+      - name: Configurar variables de entorno para pruebas
+        working-directory: ./backend
+        run: |
+          echo "DATABASE_URL=postgresql://postgres:password@localhost:5432/test_db" > .env
+      
+      - name: Ejecutar migraciones de Prisma
+        working-directory: ./backend
+        run: npx prisma migrate dev --name init
+      
+      - name: Ejecutar pruebas
+        working-directory: ./backend
+        run: npm test
+
+  build:
+    name: Generar Build del Backend
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v3
+      
+      - name: Configuración de Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'backend/package-lock.json'
+      
+      - name: Instalar dependencias
+        working-directory: ./backend
+        run: npm ci
+      
+      - name: Generar build
+        working-directory: ./backend
+        run: npm run build
+      
+      - name: Comprimir artefactos
+        working-directory: ./backend
+        run: |
+          tar -czf backend-build.tar.gz dist node_modules package.json package-lock.json prisma
+      
+      - name: Subir artefactos de build
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-build
+          path: backend/backend-build.tar.gz
+          retention-days: 1
+
+  deploy:
+    name: Desplegar en EC2
+    needs: build
+    runs-on: ubuntu-latest
+    # Solo desplegar cuando el PR está abierto y se hace push a la rama
+    if: github.event_name == 'push' && github.event.pull_request
+    
+    steps:
+      - name: Descargar artefactos de build
+        uses: actions/download-artifact@v3
+        with:
+          name: backend-build
+          path: .
+      
+      - name: Configurar clave SSH para EC2
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/ec2_key.pem
+          chmod 600 ~/.ssh/ec2_key.pem
+          echo -e "Host ec2\n\tHostName ${{ secrets.EC2_INSTANCE }}\n\tUser ${{ secrets.EC2_USER }}\n\tIdentityFile ~/.ssh/ec2_key.pem\n\tStrictHostKeyChecking no" > ~/.ssh/config
+      
+      - name: Transferir archivos a EC2
+        run: |
+          scp backend-build.tar.gz ec2:~/
+      
+      - name: Ejecutar despliegue en EC2
+        run: |
+          ssh ec2 '
+            # Detener servicio si está en ejecución
+            pm2 stop backend || true
+            
+            # Limpiar y preparar directorio
+            rm -rf ~/backend-deployment
+            mkdir -p ~/backend-deployment
+            
+            # Extraer archivos
+            tar -xzf ~/backend-build.tar.gz -C ~/backend-deployment
+            
+            # Configurar variables de entorno
+            echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" > ~/backend-deployment/.env
+            
+            # Iniciar la aplicación con PM2
+            cd ~/backend-deployment
+            pm2 start dist/index.js --name backend
+            
+            # Limpiar
+            rm ~/backend-build.tar.gz
+          ' 
