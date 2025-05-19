@@ -1,0 +1,317 @@
+name: Backend Pipeline
+
+on:
+  push:
+    branches:
+      - "**" # Triggers on all branches
+  pull_request:
+    branches:
+      - "**" # Triggers on PRs to all branches
+
+env:
+  NODE_VERSION: "18.x"
+  AWS_REGION: us-east-1 # Change this to your preferred region
+
+jobs:
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10 # Fail the job if it takes longer than 10 minutes
+
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        id: npm-cache
+        with:
+          path: backend/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('backend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install Backend Dependencies
+        if: steps.npm-cache.outputs.cache-hit != 'true'
+        run: |
+          cd backend
+          npm ci
+
+      - name: Run TypeScript Check
+        run: |
+          cd backend
+          npm run tsc -- --noEmit
+        continue-on-error: false # Fail fast if TypeScript check fails
+
+      - name: Run Linting
+        run: |
+          cd backend
+          npm run lint -- --max-warnings=0  # Fail on any warnings
+        continue-on-error: false # Fail fast if linting fails
+
+      - name: Run Tests with Coverage
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          CI: true # Ensures test output is optimized for CI
+        run: |
+          cd backend
+          npm test -- --coverage --watchAll=false --bail  # --bail stops on first failure
+        continue-on-error: false # Fail fast if tests fail
+
+      - name: Upload Test Results
+        if: always() # Run this step even if tests fail
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            backend/coverage
+            backend/junit.xml
+          retention-days: 7
+
+  build-backend:
+    name: Build Backend
+    needs: backend-tests # Ensures this job runs only if tests pass
+    runs-on: ubuntu-latest
+    timeout-minutes: 15 # Fail the job if it takes longer than 15 minutes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        id: npm-cache
+        with:
+          path: backend/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('backend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install Production Dependencies
+        if: steps.npm-cache.outputs.cache-hit != 'true'
+        run: |
+          cd backend
+          npm ci --only=production  # Only install production dependencies
+
+      - name: Verify Build Directory
+        run: |
+          cd backend
+          rm -rf dist/  # Clean previous builds
+          mkdir -p dist/  # Ensure dist directory exists
+
+      - name: Build Backend
+        run: |
+          cd backend
+          npm run build
+        env:
+          NODE_ENV: production # Ensure production build
+
+      - name: Verify Build Output
+        run: |
+          cd backend
+          if [ ! -f "dist/index.js" ]; then
+            echo "Build failed: dist/index.js not found"
+            exit 1
+          fi
+          echo "Build artifacts:"
+          ls -la dist/
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-dist
+          path: |
+            backend/dist/**/*
+            backend/package.json
+            backend/package-lock.json
+          retention-days: 5
+          compression-level: 9 # Maximum compression
+
+      - name: Generate Build Info
+        run: |
+          echo "Build completed at $(date)" >> backend/dist/build-info.txt
+          echo "Commit: ${{ github.sha }}" >> backend/dist/build-info.txt
+          echo "Branch: ${{ github.ref }}" >> backend/dist/build-info.txt
+          echo "Build Number: ${{ github.run_number }}" >> backend/dist/build-info.txt
+
+      - name: Upload Build Info
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-info
+          path: backend/dist/build-info.txt
+          retention-days: 30
+
+  deploy-to-ec2:
+    name: Deploy to EC2
+    needs: build-backend # Ensures this job runs only if build succeeds
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' # Only deploy on pushes to main
+    runs-on: ubuntu-latest
+    timeout-minutes: 10 # Fail the job if it takes longer than 10 minutes
+
+    steps:
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-dist
+          path: backend/dist
+        continue-on-error: false # Fail if artifacts are not found
+
+      - name: Download Build Info
+        uses: actions/download-artifact@v4
+        with:
+          name: build-info
+          path: backend/dist
+        continue-on-error: true # Don't fail if build info is missing
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+        env:
+          SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+
+      - name: Verify EC2 Connection
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} 'echo "Connection successful"'
+        continue-on-error: false
+
+      - name: Create Backup
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} '
+            BACKUP_DIR="/var/www/backend/backups/$(date +%Y%m%d_%H%M%S)"
+            mkdir -p $BACKUP_DIR
+            if [ -d "/var/www/backend/current" ]; then
+              cp -r /var/www/backend/current/* $BACKUP_DIR/ || true
+            fi
+          '
+
+      - name: Deploy Application
+        run: |
+          # Create deployment directory
+          ssh -i ~/.ssh/deploy_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} '
+            mkdir -p /var/www/backend/deploy
+          '
+
+          # Copy files using rsync
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            --exclude 'node_modules' \
+            --exclude '.git' \
+            backend/dist/ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/var/www/backend/deploy/
+
+          # Execute deployment commands
+          ssh -i ~/.ssh/deploy_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} '
+            cd /var/www/backend/deploy && \
+            npm ci --only=production && \
+            
+            # Update current deployment
+            rm -rf /var/www/backend/current && \
+            mv /var/www/backend/deploy /var/www/backend/current && \
+            
+            # Restart application
+            if pm2 list | grep -q "backend"; then
+              pm2 reload backend || pm2 start /var/www/backend/current/dist/index.js --name backend
+            else
+              pm2 start /var/www/backend/current/dist/index.js --name backend
+            fi
+          '
+
+      - name: Verify Deployment
+        run: |
+          # Wait for application to start
+          sleep 10
+
+          # Check if application is running
+          ssh -i ~/.ssh/deploy_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} '
+            if ! pm2 list | grep -q "backend.*online"; then
+              echo "Application failed to start"
+              pm2 logs backend --lines 20
+              exit 1
+            fi
+          '
+
+          # Verify application health
+          HEALTH_CHECK_URL="http://${{ secrets.EC2_HOST }}:3010/health"
+          for i in {1..5}; do
+            if curl -s -f "$HEALTH_CHECK_URL" > /dev/null; then
+              echo "Application is healthy"
+              exit 0
+            fi
+            echo "Health check attempt $i failed, retrying..."
+            sleep 5
+          done
+          echo "Health check failed after 5 attempts"
+          exit 1
+
+      - name: Rollback on Failure
+        if: failure()
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} '
+            # Find latest backup
+            LATEST_BACKUP=$(ls -t /var/www/backend/backups | head -n1)
+            if [ ! -z "$LATEST_BACKUP" ]; then
+              echo "Rolling back to backup: $LATEST_BACKUP"
+              rm -rf /var/www/backend/current
+              cp -r "/var/www/backend/backups/$LATEST_BACKUP" /var/www/backend/current
+              pm2 reload backend || pm2 start /var/www/backend/current/dist/index.js --name backend
+            else
+              echo "No backup found for rollback"
+            fi
+          '
+
+      - name: Cleanup Old Backups
+        if: success()
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} '
+            # Keep only last 5 backups
+            ls -t /var/www/backend/backups | tail -n +6 | xargs -I {} rm -rf "/var/www/backend/backups/{}" || true
+          '
+
+      - name: Notify Deployment Status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Deployment successful"
+            echo "Deployed commit: ${{ github.sha }}"
+            echo "Deployed to: ${{ secrets.EC2_HOST }}"
+          else
+            echo "❌ Deployment failed"
+            echo "Failed commit: ${{ github.sha }}"
+            echo "Target host: ${{ secrets.EC2_HOST }}"
+          fi
