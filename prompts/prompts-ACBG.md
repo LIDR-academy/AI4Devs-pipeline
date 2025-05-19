@@ -51,7 +51,16 @@ Necesito configurar el trigger de un workflow de GitHub Actions para que se ejec
 Además, necesito asegurar que el job de despliegue solo se ejecute cuando se hace push a una rama que tiene un PR abierto.
 ``` 
 
-## Prompt7: Duda credenciales secretas  <Cursor Agent Cloud 3.7 sonet>
+## Prompt5: para Instalación Automática de PM2  <Cursor Agent Cloud 3.7 sonet>
+
+```
+Necesito modificar el script de despliegue para que verifique si PM2 está instalado en la instancia EC2 y lo instale si no lo está. El script debe:
+1. Verificar si PM2 está disponible
+2. Instalar PM2 globalmente si no está presente
+3. Mantener el resto de la funcionalidad de despliegue
+```
+
+## Prompt6: para Credenciales Secretas  <Cursor Agent Cloud 3.7 sonet>
 ```
 Por ejemplo:
 Yo tengo que "EC2_USER" == ec2-user
@@ -59,8 +68,18 @@ Y ya lo subí al "Settings" → "Secrets and variables" → "Actions" cada secre
 en el actual código @pipeline.yml  debo modificar algo?
 ```
 
-## Prompt6: para Concluir  <Cursor Agent Cloud 3.7 sonet>
+## Prompt7: para Documentación del PR  <Cursor Agent Cloud 3.7 sonet>
 ```
-Listo, entonces seria solo actualizar el documento @prompts-iniciales.md y hacer los commit y el push para poder ver como funciona?
-O que falta? según la **misión** @tarea.md 
+Ayúdame con el mensaje para el PR de entrega que incluya:
+1. Objetivo del pipeline
+2. Flujo y steps implementados
+3. Configuración de seguridad
+4. Mejoras realizadas
+5. Instrucciones de uso
+6. Estado de validación
+```
+
+## Prompt8: para Verificación Final  <Cursor Agent Cloud 3.7 sonet>
+```
+No, ahora verifiquemos que estamos cumpliendo con la **misión** @tarea.md
 ```
