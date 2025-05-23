@@ -2,9 +2,8 @@ name: Backend CI/CD Pipeline
 
 on:
   pull_request:
-    types: [opened, synchronize]
-    paths:
-      - 'backend/**'
+    branches:
+      - main
 
 jobs:
   test-and-deploy:
