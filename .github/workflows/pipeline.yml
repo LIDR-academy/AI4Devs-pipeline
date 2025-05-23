@@ -1,0 +1,78 @@
+name: Backend CI/CD Pipeline
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'backend/**'
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          
+      - name: Install Dependencies
+        working-directory: backend
+        run: npm install
+        
+      - name: Run Prisma Generate and Migrations
+        working-directory: backend
+        run: |
+          npx prisma generate
+          npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          
+      - name: Run Tests
+        working-directory: backend
+        run: npm test
+        
+      - name: Build Backend
+        working-directory: backend
+        run: npm run build
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+          
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_INSTANCE }} >> ~/.ssh/known_hosts
+          
+      - name: Deploy to EC2
+        run: |
+          # Instalar dependencias en EC2
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }} '
+            curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
+            sudo yum install -y nodejs
+            sudo npm install -g pm2
+            sudo yum install -y nginx
+            sudo systemctl start nginx
+            mkdir -p ~/app
+          '
+          
+          # Transferir archivos
+          scp -r backend/dist backend/package*.json backend/prisma ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }}:~/app/
+          
+          # Configurar y iniciar la aplicación
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }} '
+            cd ~/app
+            npm install --production
+            npx prisma generate
+            pm2 delete all || true
+            pm2 start dist/index.js --name "backend"
+            pm2 save
+          '
