@@ -1330,3 +1330,62 @@ Si tienes algún error, comparte el mensaje y te ayudo a solucionarlo.
 
 ---
 
+_**User**_
+
+Tengo un error en github actions:
+---- ERROR -----
+
+Annotations
+1 error
+Error
+No event triggers defined in `on`
+
+---- FIN ERROR ----
+
+para ejecuta el despliegue con el archivo #file:ci.yml y no con #file:pipeline.yml ¿como lo resolvemos?
+
+---
+
+_**Assistant**_
+
+El error se debe a que tu archivo `ci.yml` está vacío y no tiene ningún trigger definido en la sección `on`.  
+GitHub Actions intenta ejecutar ese workflow pero no encuentra eventos para dispararlo.
+
+### ¿Cómo resolverlo?
+
+#### Opción 1: Elimina o renombra el archivo `ci.yml`
+Si no necesitas el archivo `ci.yml`, simplemente elimínalo o renómbralo para que GitHub Actions no lo intente ejecutar.
+
+```sh
+# Elimina el archivo desde tu terminal o explorador de archivos
+del .github/workflows/ci.yml
+```
+
+#### Opción 2: Agrega un trigger válido en `ci.yml`
+Si quieres usar `ci.yml` para otro propósito, agrega al menos un trigger, por ejemplo:
+
+```yaml
+on:
+  push:
+    branches:
+      - main
+jobs:
+  dummy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Este workflow está activo"
+```
+
+#### Opción 3: Asegúrate de que el despliegue se haga con `pipeline.yml`
+Tu archivo `pipeline.yml` ya tiene el trigger correcto (`pull_request`).  
+No necesitas modificar nada ahí, solo asegúrate de que el archivo que quieres ejecutar es el que tiene el trigger definido.
+
+---
+
+**Recomendación:**  
+Elimina el archivo `ci.yml` si no lo usas, así evitarás confusiones y errores en GitHub Actions.
+
+¿Quieres que te ayude a eliminar el archivo o prefieres agregarle un trigger básico?
+
+---
+
