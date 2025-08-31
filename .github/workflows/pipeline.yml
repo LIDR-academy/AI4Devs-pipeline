@@ -69,6 +69,12 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no ${{ env.EC2_USER }}@${{ env.EC2_HOST }} << 'EOF'
             set -e
+            # Instalar Node.js y npm si no existen
+            if ! command -v node &> /dev/null; then
+              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+              sudo apt-get install -y nodejs
+            fi
+
             # Detener proceso Node.js anterior si existe
             pkill node || true
             # Eliminar versión anterior
@@ -81,6 +87,13 @@ jobs:
 
           # Descomprimir y preparar entorno en EC2
           ssh -o StrictHostKeyChecking=no ${{ env.EC2_USER }}@${{ env.EC2_HOST }} << 'EOF'
+            set -e
+            # Instalar Node.js y npm si no existen
+            if ! command -v node &> /dev/null; then
+              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+              sudo apt-get install -y nodejs
+            fi
+
             cd ~/ai4devs-backend
             tar -xzf backend.tar.gz
             rm backend.tar.gz

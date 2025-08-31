@@ -1389,3 +1389,471 @@ Elimina el archivo `ci.yml` si no lo usas, así evitarás confusiones y errores 
 
 ---
 
+_**User**_
+
+Vuelve a mostrarme los pasos para probar #file:pipeline.yml 
+
+---
+
+_**Assistant**_
+
+Claro, aquí tienes los pasos para probar tu archivo `pipeline.yml` y validar el despliegue en EC2:
+
+---
+
+## Pasos para probar el pipeline (`pipeline.yml`)
+
+### 1. Realiza un push y abre un Pull Request
+
+1. Haz un cambio sencillo en tu repositorio (puede ser un comentario en algún archivo).
+2. Haz commit y push a una rama nueva o existente:
+   ```sh
+   git checkout -b prueba-pipeline
+   git add .
+   git commit -m "Prueba de pipeline"
+   git push origin prueba-pipeline
+   ```
+3. Ve a GitHub y abre un Pull Request de esa rama hacia la rama principal (`main` o `master`).
+
+---
+
+### 2. Verifica la ejecución del workflow en GitHub Actions
+
+1. Ve a la pestaña **Actions** en tu repositorio de GitHub.
+2. Busca el workflow "Backend CI/CD Pipeline".
+3. Haz clic en el workflow y revisa cada paso:
+   - Instalación de dependencias y ejecución de pruebas.
+   - Build del backend.
+   - Archivado y despliegue en EC2.
+   - Levantamiento de la base de datos con Docker Compose.
+   - Migraciones y seed de Prisma.
+   - Arranque del backend en modo producción.
+
+---
+
+### 3. Validar el despliegue en EC2
+
+1. Accede a la IP pública de tu instancia EC2 en el puerto **3000** desde tu navegador:
+   ```
+   http://<IP_PUBLICA_EC2>:3000
+   ```
+2. Verifica que el backend responde correctamente (puedes probar algún endpoint básico).
+
+---
+
+### 4. Revisar logs y errores
+
+1. Si el despliegue falla, revisa los logs en GitHub Actions.
+2. Conéctate por SSH a tu instancia EC2 y revisa el archivo de log:
+   ```sh
+   cat ~/ai4devs-backend/backend/app.log
+   ```
+3. Si hay errores, copia el mensaje y te ayudo a solucionarlos.
+
+---
+
+¿Listo para realizar el push y abrir el Pull Request?  
+¿Necesitas ayuda para interpretar los resultados del workflow o validar el backend en EC2?  
+Si tienes algún error, comparte el mensaje y te ayudo a solucionarlo.
+
+---
+
+_**User**_
+
+Tenemos el siguiente error dentro del archivo "app.log":
+```sh
+nohup: failed to run command 'npm': No such file or directory
+```
+
+Así mismo en "Deploy to EC2" tengo la siguiente información:
+```sh
+Run ssh -o StrictHostKeyChecking=no ***@*** << 'EOF'
+Pseudo-terminal will not be allocated because stdin is not a terminal.
+Warning: Permanently added '***' (ED25519) to the list of known hosts.
+Welcome to Ubuntu 24.04.3 LTS (GNU/Linux 6.14.0-1011-aws x86_64)
+
+ * Documentation:  https://help.***.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://***.com/pro
+
+ System information as of Sun Aug 31 23:37:49 UTC 2025
+
+  System load:  0.0               Processes:             118
+  Usage of /:   39.9% of 6.71GB   Users logged in:       1
+  Memory usage: 29%               IPv4 address for enX0: 172.31.19.184
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+19 updates can be applied immediately.
+17 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+Enable ESM Apps to receive additional future security updates.
+See https://***.com/esm or run: sudo pro status
+
+
+Pseudo-terminal will not be allocated because stdin is not a terminal.
+Welcome to Ubuntu 24.04.3 LTS (GNU/Linux 6.14.0-1011-aws x86_64)
+
+ * Documentation:  https://help.***.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://***.com/pro
+
+ System information as of Sun Aug 31 23:37:49 UTC 2025
+
+  System load:  0.0               Processes:             118
+  Usage of /:   39.9% of 6.71GB   Users logged in:       1
+  Memory usage: 29%               IPv4 address for enX0: 172.31.19.184
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+19 updates can be applied immediately.
+17 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+Enable ESM Apps to receive additional future security updates.
+See https://***.com/esm or run: sudo pro status
+
+
+time="2025-08-31T23:37:54Z" level=warning msg="/home/***/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+ db Pulling 
+ 396b1da7636e Pulling fs layer 
+ f5465e2fc020 Pulling fs layer 
+ c166c949e1c3 Pulling fs layer 
+ 7fa725c973af Pulling fs layer 
+ 1f6dfcaad4e9 Pulling fs layer 
+ b7a79609094c Pulling fs layer 
+ 901a9540064a Pulling fs layer 
+ 085f0a899c07 Pulling fs layer 
+ 5d91a345d79a Pulling fs layer 
+ f7f2afaa1b41 Pulling fs layer 
+ 36b4e7f51364 Pulling fs layer 
+ 85558a023eea Pulling fs layer 
+ be9fdbdba096 Pulling fs layer 
+ ae28e2b99a62 Pulling fs layer 
+ 7fa725c973af Waiting 
+ 1f6dfcaad4e9 Waiting 
+ b7a79609094c Waiting 
+ 901a9540064a Waiting 
+ 085f0a899c07 Waiting 
+ 5d91a345d79a Waiting 
+ f7f2afaa1b41 Waiting 
+ 36b4e7f51364 Waiting 
+ 85558a023eea Waiting 
+ be9fdbdba096 Waiting 
+ ae28e2b99a62 Waiting 
+ c166c949e1c3 Downloading [>                                                  ]  65.12kB/6.437MB
+ f5465e2fc020 Downloading [============================================>      ]  1.049kB/1.166kB
+ f5465e2fc020 Downloading [==================================================>]  1.166kB/1.166kB
+ f5465e2fc020 Verifying Checksum 
+ f5465e2fc020 Download complete 
+ 396b1da7636e Downloading [>                                                  ]  307.2kB/29.77MB
+ c166c949e1c3 Downloading [=========>                                         ]   1.18MB/6.437MB
+ 396b1da7636e Downloading [===>                                               ]  2.146MB/29.77MB
+ c166c949e1c3 Downloading [================>                                  ]  2.146MB/6.437MB
+ 396b1da7636e Downloading [=======>                                           ]  4.604MB/29.77MB
+ c166c949e1c3 Downloading [========================>                          ]  3.146MB/6.437MB
+ 396b1da7636e Downloading [============>                                      ]  7.324MB/29.77MB
+ c166c949e1c3 Downloading [===================================>               ]  4.555MB/6.437MB
+ 7fa725c973af Downloading [>                                                  ]  15.06kB/1.454MB
+ 396b1da7636e Downloading [==============>                                    ]  8.544MB/29.77MB
+ c166c949e1c3 Downloading [=================================================> ]  6.312MB/6.437MB
+ c166c949e1c3 Verifying Checksum 
+ c166c949e1c3 Download complete 
+ 7fa725c973af Downloading [=========================>                         ]  737.3kB/1.454MB
+ 396b1da7636e Downloading [===================>                               ]   11.6MB/29.77MB
+ 7fa725c973af Downloading [=============================================>     ]  1.327MB/1.454MB
+ 396b1da7636e Downloading [========================>                          ]  14.65MB/29.77MB
+ 7fa725c973af Verifying Checksum 
+ 7fa725c973af Download complete 
+ 396b1da7636e Downloading [===============================>                   ]  18.64MB/29.77MB
+ 1f6dfcaad4e9 Downloading [>                                                  ]  82.45kB/8.203MB
+ 396b1da7636e Downloading [==================================>                ]  20.79MB/29.77MB
+ 1f6dfcaad4e9 Downloading [========================>                          ]  3.949MB/8.203MB
+ 396b1da7636e Downloading [======================================>            ]  22.95MB/29.77MB
+ 1f6dfcaad4e9 Verifying Checksum 
+ 1f6dfcaad4e9 Download complete 
+ 396b1da7636e Downloading [=============================================>     ]   26.9MB/29.77MB
+ b7a79609094c Downloading [>                                                  ]  13.69kB/1.311MB
+ 396b1da7636e Verifying Checksum 
+ 396b1da7636e Download complete 
+ 396b1da7636e Extracting [>                                                  ]  327.7kB/29.77MB
+ b7a79609094c Verifying Checksum 
+ b7a79609094c Download complete 
+ 396b1da7636e Extracting [====>                                              ]  2.621MB/29.77MB
+ 901a9540064a Downloading [==================================================>]     116B/116B
+ 901a9540064a Verifying Checksum 
+ 901a9540064a Download complete 
+ 396b1da7636e Extracting [========>                                          ]  4.915MB/29.77MB
+ 085f0a899c07 Downloading [=====================>                             ]  1.369kB/3.141kB
+ 085f0a899c07 Downloading [==================================================>]  3.141kB/3.141kB
+ 085f0a899c07 Verifying Checksum 
+ 085f0a899c07 Download complete 
+ 396b1da7636e Extracting [============>                                      ]  7.209MB/29.77MB
+ 5d91a345d79a Downloading [>                                                  ]  536.6kB/114.2MB
+ 396b1da7636e Extracting [===============>                                   ]  9.503MB/29.77MB
+ f7f2afaa1b41 Downloading [======>                                            ]  1.369kB/10.34kB
+ f7f2afaa1b41 Downloading [==================================================>]  10.34kB/10.34kB
+ f7f2afaa1b41 Verifying Checksum 
+ f7f2afaa1b41 Download complete 
+ 5d91a345d79a Downloading [>                                                  ]  2.146MB/114.2MB
+ 396b1da7636e Extracting [==================>                                ]  11.14MB/29.77MB
+ 5d91a345d79a Downloading [===>                                               ]  8.045MB/114.2MB
+ 396b1da7636e Extracting [=====================>                             ]  12.78MB/29.77MB
+ 5d91a345d79a Downloading [=====>                                             ]  12.84MB/114.2MB
+ 36b4e7f51364 Downloading [==================================================>]     127B/127B
+ 36b4e7f51364 Verifying Checksum 
+ 36b4e7f51364 Download complete 
+ 396b1da7636e Extracting [=========================>                         ]  15.07MB/29.77MB
+ 85558a023eea Downloading [==================================================>]     167B/167B
+ 85558a023eea Verifying Checksum 
+ 85558a023eea Download complete 
+ 5d91a345d79a Downloading [======>                                            ]  15.52MB/114.2MB
+ 396b1da7636e Extracting [=============================>                     ]  17.69MB/29.77MB
+ 5d91a345d79a Downloading [=======>                                           ]  18.21MB/114.2MB
+ 396b1da7636e Extracting [==================================>                ]  20.64MB/29.77MB
+ be9fdbdba096 Downloading [===========>                                       ]  1.369kB/5.928kB
+ be9fdbdba096 Downloading [==================================================>]  5.928kB/5.928kB
+ be9fdbdba096 Verifying Checksum 
+ be9fdbdba096 Download complete 
+ 396b1da7636e Extracting [======================================>            ]  22.94MB/29.77MB
+ 5d91a345d79a Downloading [=========>                                         ]  21.95MB/114.2MB
+ 396b1da7636e Extracting [==========================================>        ]  25.23MB/29.77MB
+ 5d91a345d79a Downloading [==========>                                        ]  24.64MB/114.2MB
+ ae28e2b99a62 Downloading [==================================================>]     186B/186B
+ ae28e2b99a62 Verifying Checksum 
+ ae28e2b99a62 Download complete 
+ 5d91a345d79a Downloading [============>                                      ]  29.44MB/114.2MB
+ 396b1da7636e Extracting [============================================>      ]  26.21MB/29.77MB
+ 5d91a345d79a Downloading [===============>                                   ]  36.38MB/114.2MB
+ 396b1da7636e Extracting [==============================================>    ]  27.85MB/29.77MB
+ 5d91a345d79a Downloading [==================>                                ]  42.23MB/114.2MB
+ 396b1da7636e Extracting [===============================================>   ]  28.51MB/29.77MB
+ 5d91a345d79a Downloading [====================>                              ]  47.05MB/114.2MB
+ 396b1da7636e Extracting [================================================>  ]  28.84MB/29.77MB
+ 5d91a345d79a Downloading [======================>                            ]  50.79MB/114.2MB
+ 396b1da7636e Extracting [================================================>  ]  29.16MB/29.77MB
+ 5d91a345d79a Downloading [=======================>                           ]  53.48MB/114.2MB
+ 396b1da7636e Extracting [==================================================>]  29.77MB/29.77MB
+ 5d91a345d79a Downloading [=========================>                         ]  57.75MB/114.2MB
+ 396b1da7636e Pull complete 
+ f5465e2fc020 Extracting [==================================================>]  1.166kB/1.166kB
+ f5465e2fc020 Extracting [==================================================>]  1.166kB/1.166kB
+ f5465e2fc020 Pull complete 
+ c166c949e1c3 Extracting [>                                                  ]  65.54kB/6.437MB
+ 5d91a345d79a Downloading [==========================>                        ]  61.47MB/114.2MB
+ c166c949e1c3 Extracting [=>                                                 ]  196.6kB/6.437MB
+ 5d91a345d79a Downloading [==============================>                    ]  68.96MB/114.2MB
+ c166c949e1c3 Extracting [==================>                                ]  2.425MB/6.437MB
+ 5d91a345d79a Downloading [================================>                  ]  73.76MB/114.2MB
+ c166c949e1c3 Extracting [======================================>            ]  4.981MB/6.437MB
+ 5d91a345d79a Downloading [=================================>                 ]  76.97MB/114.2MB
+ c166c949e1c3 Extracting [=================================================> ]  6.423MB/6.437MB
+ c166c949e1c3 Extracting [==================================================>]  6.437MB/6.437MB
+ 5d91a345d79a Downloading [===================================>               ]  81.23MB/114.2MB
+ c166c949e1c3 Pull complete 
+ 7fa725c973af Extracting [=>                                                 ]  32.77kB/1.454MB
+ 5d91a345d79a Downloading [=====================================>             ]  86.59MB/114.2MB
+ 7fa725c973af Extracting [=============================================>     ]  1.311MB/1.454MB
+ 7fa725c973af Extracting [==================================================>]  1.454MB/1.454MB
+ 5d91a345d79a Downloading [========================================>          ]  92.47MB/114.2MB
+ 7fa725c973af Pull complete 
+ 1f6dfcaad4e9 Extracting [>                                                  ]   98.3kB/8.203MB
+ 5d91a345d79a Downloading [==========================================>        ]  97.79MB/114.2MB
+ 1f6dfcaad4e9 Extracting [======>                                            ]  1.081MB/8.203MB
+ 5d91a345d79a Downloading [============================================>      ]  102.6MB/114.2MB
+ 1f6dfcaad4e9 Extracting [=================>                                 ]  2.851MB/8.203MB
+ 5d91a345d79a Downloading [===============================================>   ]  109.6MB/114.2MB
+ 1f6dfcaad4e9 Extracting [=======================>                           ]  3.834MB/8.203MB
+ 5d91a345d79a Verifying Checksum 
+ 5d91a345d79a Download complete 
+ 1f6dfcaad4e9 Extracting [============================>                      ]  4.719MB/8.203MB
+ 1f6dfcaad4e9 Extracting [====================================>              ]  5.997MB/8.203MB
+ 1f6dfcaad4e9 Extracting [================================================>  ]  7.963MB/8.203MB
+ 1f6dfcaad4e9 Extracting [==================================================>]  8.203MB/8.203MB
+ 1f6dfcaad4e9 Pull complete 
+ b7a79609094c Extracting [=>                                                 ]  32.77kB/1.311MB
+ b7a79609094c Extracting [==================================================>]  1.311MB/1.311MB
+ b7a79609094c Pull complete 
+ 901a9540064a Extracting [==================================================>]     116B/116B
+ 901a9540064a Extracting [==================================================>]     116B/116B
+ 901a9540064a Pull complete 
+ 085f0a899c07 Extracting [==================================================>]  3.141kB/3.141kB
+ 085f0a899c07 Extracting [==================================================>]  3.141kB/3.141kB
+ 085f0a899c07 Pull complete 
+ 5d91a345d79a Extracting [>                                                  ]  557.1kB/114.2MB
+ 5d91a345d79a Extracting [=>                                                 ]  3.342MB/114.2MB
+ 5d91a345d79a Extracting [==>                                                ]  6.685MB/114.2MB
+ 5d91a345d79a Extracting [===>                                               ]  8.913MB/114.2MB
+ 5d91a345d79a Extracting [====>                                              ]  11.14MB/114.2MB
+ 5d91a345d79a Extracting [======>                                            ]  13.93MB/114.2MB
+ 5d91a345d79a Extracting [=======>                                           ]  16.15MB/114.2MB
+ 5d91a345d79a Extracting [========>                                          ]  18.94MB/114.2MB
+ 5d91a345d79a Extracting [=========>                                         ]  21.73MB/114.2MB
+ 5d91a345d79a Extracting [==========>                                        ]  24.51MB/114.2MB
+ 5d91a345d79a Extracting [===========>                                       ]   27.3MB/114.2MB
+ 5d91a345d79a Extracting [=============>                                     ]  30.64MB/114.2MB
+ 5d91a345d79a Extracting [==============>                                    ]  33.98MB/114.2MB
+ 5d91a345d79a Extracting [================>                                  ]  36.77MB/114.2MB
+ 5d91a345d79a Extracting [=================>                                 ]  40.11MB/114.2MB
+ 5d91a345d79a Extracting [===================>                               ]  43.45MB/114.2MB
+ 5d91a345d79a Extracting [====================>                              ]  46.79MB/114.2MB
+ 5d91a345d79a Extracting [=====================>                             ]  50.14MB/114.2MB
+ 5d91a345d79a Extracting [=======================>                           ]  52.92MB/114.2MB
+ 5d91a345d79a Extracting [========================>                          ]  55.15MB/114.2MB
+ 5d91a345d79a Extracting [========================>                          ]  56.82MB/114.2MB
+ 5d91a345d79a Extracting [=========================>                         ]  59.05MB/114.2MB
+ 5d91a345d79a Extracting [==========================>                        ]  61.28MB/114.2MB
+ 5d91a345d79a Extracting [===========================>                       ]   63.5MB/114.2MB
+ 5d91a345d79a Extracting [=============================>                     ]   67.4MB/114.2MB
+ 5d91a345d79a Extracting [==============================>                    ]  70.19MB/114.2MB
+ 5d91a345d79a Extracting [================================>                  ]  73.53MB/114.2MB
+ 5d91a345d79a Extracting [=================================>                 ]  76.32MB/114.2MB
+ 5d91a345d79a Extracting [==================================>                ]   79.1MB/114.2MB
+ 5d91a345d79a Extracting [===================================>               ]  81.89MB/114.2MB
+ 5d91a345d79a Extracting [=====================================>             ]  85.23MB/114.2MB
+ 5d91a345d79a Extracting [======================================>            ]  88.01MB/114.2MB
+ 5d91a345d79a Extracting [=======================================>           ]  91.36MB/114.2MB
+ 5d91a345d79a Extracting [=========================================>         ]   94.7MB/114.2MB
+ 5d91a345d79a Extracting [==========================================>        ]  96.37MB/114.2MB
+ 5d91a345d79a Extracting [==========================================>        ]  98.04MB/114.2MB
+ 5d91a345d79a Extracting [===========================================>       ]  100.3MB/114.2MB
+ 5d91a345d79a Extracting [============================================>      ]  101.9MB/114.2MB
+ 5d91a345d79a Extracting [=============================================>     ]  104.2MB/114.2MB
+ 5d91a345d79a Extracting [==============================================>    ]  106.4MB/114.2MB
+ 5d91a345d79a Extracting [===============================================>   ]  108.1MB/114.2MB
+ 5d91a345d79a Extracting [===============================================>   ]  109.2MB/114.2MB
+ 5d91a345d79a Extracting [================================================>  ]  110.3MB/114.2MB
+ 5d91a345d79a Extracting [=================================================> ]    112MB/114.2MB
+ 5d91a345d79a Extracting [=================================================> ]  112.5MB/114.2MB
+ 5d91a345d79a Extracting [=================================================> ]  113.6MB/114.2MB
+ 5d91a345d79a Extracting [==================================================>]  114.2MB/114.2MB
+ 5d91a345d79a Pull complete 
+ f7f2afaa1b41 Extracting [==================================================>]  10.34kB/10.34kB
+ f7f2afaa1b41 Extracting [==================================================>]  10.34kB/10.34kB
+ f7f2afaa1b41 Pull complete 
+ 36b4e7f51364 Extracting [==================================================>]     127B/127B
+ 36b4e7f51364 Extracting [==================================================>]     127B/127B
+ 36b4e7f51364 Pull complete 
+ 85558a023eea Extracting [==================================================>]     167B/167B
+ 85558a023eea Extracting [==================================================>]     167B/167B
+ 85558a023eea Pull complete 
+ be9fdbdba096 Extracting [==================================================>]  5.928kB/5.928kB
+ be9fdbdba096 Extracting [==================================================>]  5.928kB/5.928kB
+ be9fdbdba096 Pull complete 
+ ae28e2b99a62 Extracting [==================================================>]     186B/186B
+ ae28e2b99a62 Extracting [==================================================>]     186B/186B
+ ae28e2b99a62 Pull complete 
+ db Pulled 
+ Network ***_default  Creating
+ Network ***_default  Created
+ Container ***-db-1  Creating
+ Container ***-db-1  Created
+ Container ***-db-1  Starting
+ Container ***-db-1  Started
+-bash: line 14: npm: command not found
+-bash: line 17: npx: command not found
+-bash: line 18: npx: command not found
+```
+¿Como lo arreglamos?
+
+---
+
+_**Assistant**_
+
+El error principal es:  
+**`nohup: failed to run command 'npm': No such file or directory`**  
+**`-bash: line 14: npm: command not found`**  
+**`-bash: line 17: npx: command not found`**
+
+Esto significa que **Node.js y npm no están instalados en tu instancia EC2**, por lo que no puede ejecutar los comandos necesarios para tu backend.
+
+---
+
+## Solución
+
+Debes instalar Node.js y npm en tu instancia EC2 **antes** de ejecutar cualquier comando relacionado con npm/npx.
+
+### 1. Agrega la instalación de Node.js y npm en el bloque SSH de tu workflow
+
+Modifica el paso `Deploy to EC2` en tu archivo `pipeline.yml` para incluir la instalación de Node.js y npm antes de ejecutar los comandos de despliegue.
+
+````yaml
+      - name: Deploy to EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ env.EC2_USER }}@${{ env.EC2_HOST }} << 'EOF'
+            set -e
+            # Instalar Node.js y npm si no existen
+            if ! command -v node &> /dev/null; then
+              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+              sudo apt-get install -y nodejs
+            fi
+
+            # Detener proceso Node.js anterior si existe
+            pkill node || true
+            # Eliminar versión anterior
+            rm -rf ~/ai4devs-backend
+            mkdir ~/ai4devs-backend
+          EOF
+
+          # Copiar el archivo comprimido al servidor
+          scp -o StrictHostKeyChecking=no backend.tar.gz ${{ env.EC2_USER }}@${{ env.EC2_HOST }}:~/ai4devs-backend/
+
+          # Descomprimir y preparar entorno en EC2
+          ssh -o StrictHostKeyChecking=no ${{ env.EC2_USER }}@${{ env.EC2_HOST }} << 'EOF'
+            set -e
+            # Instalar Node.js y npm si no existen
+            if ! command -v node &> /dev/null; then
+              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+              sudo apt-get install -y nodejs
+            fi
+
+            cd ~/ai4devs-backend
+            tar -xzf backend.tar.gz
+            rm backend.tar.gz
+
+            # Levantar base de datos con Docker Compose
+            export DB_PASSWORD="${{ env.DB_PASSWORD }}"
+            export DB_USER="${{ env.DB_USER }}"
+            export DB_NAME="${{ env.DB_NAME }}"
+            export DB_PORT="${{ env.DB_PORT }}"
+            docker compose -f /home/${{ env.EC2_USER }}/docker-compose.yml up -d
+
+            # Instalar dependencias si es necesario
+            cd backend
+            npm install --production
+
+            # Ejecutar migraciones y seed de Prisma
+            npx prisma migrate deploy
+            npx prisma db seed
+
+            # Arrancar el backend en modo producción
+            nohup npm run start:prod > app.log 2>&1 &
+          EOF
+````
+
+---
+
+### 2. ¿Por qué ocurre esto?
+
+- Las instancias EC2 nuevas no tienen Node.js ni npm instalados por defecto.
+- El workflow debe instalar Node.js y npm cada vez que despliega, o asegurarse de que ya están instalados.
+
+---
+
+### 3. Recomendación de seguridad
+
+- Instala solo la versión LTS de Node.js que necesitas.
+- Mantén tu instancia actualizada (`sudo apt-get update && sudo apt-get upgrade -y`).
+
+---
+
+¿Listo para aplicar el cambio y probar de nuevo el pipeline?  
+¿Necesitas que te ayude a ajustar otro paso del workflow?
+
+---
+
