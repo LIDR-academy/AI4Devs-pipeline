@@ -54,7 +54,7 @@ jobs:
       # 4. Preparar archivos para despliegue
       - name: Archive backend build
         run: |
-          tar -czf backend.tar.gz backend/dist backend/package.json backend/.env backend/node_modules
+          tar -czf backend.tar.gz backend
         # Incluye los archivos necesarios para producción
 
       # 5. Configurar clave SSH para conexión segura a EC2

@@ -1857,3 +1857,334 @@ Modifica el paso `Deploy to EC2` en tu archivo `pipeline.yml` para incluir la in
 
 ---
 
+_**User**_
+
+Ahora obtenemos el siguinte error:
+```sh
+Run ssh -o StrictHostKeyChecking=no ***@*** << 'EOF'
+Pseudo-terminal will not be allocated because stdin is not a terminal.
+Warning: Permanently added '***' (ED25519) to the list of known hosts.
+Welcome to Ubuntu 24.04.3 LTS (GNU/Linux 6.14.0-1011-aws x86_64)
+
+ * Documentation:  https://help.***.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://***.com/pro
+
+ System information as of Sun Aug 31 23:50:40 UTC 2025
+
+  System load:  0.0               Processes:             130
+  Usage of /:   50.1% of 6.71GB   Users logged in:       1
+  Memory usage: 36%               IPv4 address for enX0: 172.31.19.184
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+19 updates can be applied immediately.
+17 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+Enable ESM Apps to receive additional future security updates.
+See https://***.com/esm or run: sudo pro status
+
+
+2025-08-31 23:50:41 - Installing pre-requisites
+Hit:1 http://us-west-1.ec2.archive.***.com/*** noble InRelease
+Hit:2 http://us-west-1.ec2.archive.***.com/*** noble-updates InRelease
+Hit:3 http://us-west-1.ec2.archive.***.com/*** noble-backports InRelease
+Hit:4 https://download.docker.com/linux/*** noble InRelease
+Hit:5 http://security.***.com/*** noble-security InRelease
+Reading package lists...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+ca-certificates is already the newest version (20240203).
+curl is already the newest version (8.5.0-2***10.6).
+gnupg is already the newest version (2.4.4-2***17.3).
+The following NEW packages will be installed:
+  apt-transport-https
+0 upgraded, 1 newly installed, 0 to remove and 13 not upgraded.
+Need to get 3970 B of archives.
+After this operation, 36.9 kB of additional disk space will be used.
+Get:1 http://us-west-1.ec2.archive.***.com/*** noble-updates/universe amd64 apt-transport-https all 2.8.3 [3970 B]
+debconf: unable to initialize frontend: Dialog
+debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)
+debconf: falling back to frontend: Readline
+debconf: unable to initialize frontend: Readline
+debconf: (This frontend requires a controlling tty.)
+debconf: falling back to frontend: Teletype
+dpkg-preconfigure: unable to re-open stdin: 
+Fetched 3970 B in 0s (161 kB/s)
+Selecting previously unselected package apt-transport-https.
+(Reading database ... 
+(Reading database ... 5%
+(Reading database ... 10%
+(Reading database ... 15%
+(Reading database ... 20%
+(Reading database ... 25%
+(Reading database ... 30%
+(Reading database ... 35%
+(Reading database ... 40%
+(Reading database ... 45%
+(Reading database ... 50%
+(Reading database ... 55%
+(Reading database ... 60%
+(Reading database ... 65%
+(Reading database ... 70%
+(Reading database ... 75%
+(Reading database ... 80%
+(Reading database ... 85%
+(Reading database ... 90%
+(Reading database ... 95%
+(Reading database ... 100%
+(Reading database ... 71977 files and directories currently installed.)
+Preparing to unpack .../apt-transport-https_2.8.3_all.deb ...
+Unpacking apt-transport-https (2.8.3) ...
+Setting up apt-transport-https (2.8.3) ...
+debconf: unable to initialize frontend: Dialog
+debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)
+debconf: falling back to frontend: Readline
+debconf: unable to initialize frontend: Readline
+debconf: (This frontend requires a controlling tty.)
+debconf: falling back to frontend: Teletype
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+Hit:1 http://us-west-1.ec2.archive.***.com/*** noble InRelease
+Hit:2 http://us-west-1.ec2.archive.***.com/*** noble-updates InRelease
+Hit:3 http://us-west-1.ec2.archive.***.com/*** noble-backports InRelease
+Hit:4 https://download.docker.com/linux/*** noble InRelease
+Get:5 https://deb.nodesource.com/node_20.x nodistro InRelease [12.1 kB]
+Hit:6 http://security.***.com/*** noble-security InRelease
+Get:7 https://deb.nodesource.com/node_20.x nodistro/main amd64 Packages [12.2 kB]
+Fetched 24.4 kB in 1s (30.0 kB/s)
+Reading package lists...
+2025-08-31 23:50:52 - Repository configured successfully.
+2025-08-31 23:50:52 - To install Node.js, run: apt-get install nodejs -y
+2025-08-31 23:50:52 - You can use N|solid Runtime as a node.js alternative
+2025-08-31 23:50:52 - To install N|solid Runtime, run: apt-get install nsolid -y 
+
+Reading package lists...
+Building dependency tree...
+Reading state information...
+The following NEW packages will be installed:
+  nodejs
+0 upgraded, 1 newly installed, 0 to remove and 13 not upgraded.
+Need to get 32.0 MB of archives.
+After this operation, 199 MB of additional disk space will be used.
+Get:1 https://deb.nodesource.com/node_20.x nodistro/main amd64 nodejs amd64 20.19.4-1nodesource1 [32.0 MB]
+debconf: unable to initialize frontend: Dialog
+debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)
+debconf: falling back to frontend: Readline
+debconf: unable to initialize frontend: Readline
+debconf: (This frontend requires a controlling tty.)
+debconf: falling back to frontend: Teletype
+dpkg-preconfigure: unable to re-open stdin: 
+Fetched 32.0 MB in 1s (58.9 MB/s)
+Selecting previously unselected package nodejs.
+(Reading database ... 
+(Reading database ... 5%
+(Reading database ... 10%
+(Reading database ... 15%
+(Reading database ... 20%
+(Reading database ... 25%
+(Reading database ... 30%
+(Reading database ... 35%
+(Reading database ... 40%
+(Reading database ... 45%
+(Reading database ... 50%
+(Reading database ... 55%
+(Reading database ... 60%
+(Reading database ... 65%
+(Reading database ... 70%
+(Reading database ... 75%
+(Reading database ... 80%
+(Reading database ... 85%
+(Reading database ... 90%
+(Reading database ... 95%
+(Reading database ... 100%
+(Reading database ... 71981 files and directories currently installed.)
+Preparing to unpack .../nodejs_20.19.4-1nodesource1_amd64.deb ...
+Unpacking nodejs (20.19.4-1nodesource1) ...
+Setting up nodejs (20.19.4-1nodesource1) ...
+Processing triggers for man-db (2.12.0-4build2) ...
+debconf: unable to initialize frontend: Dialog
+debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)
+debconf: falling back to frontend: Readline
+debconf: unable to initialize frontend: Readline
+debconf: (This frontend requires a controlling tty.)
+debconf: falling back to frontend: Teletype
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+Pseudo-terminal will not be allocated because stdin is not a terminal.
+Welcome to Ubuntu 24.04.3 LTS (GNU/Linux 6.14.0-1011-aws x86_64)
+
+ * Documentation:  https://help.***.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://***.com/pro
+
+ System information as of Sun Aug 31 23:50:40 UTC 2025
+
+  System load:  0.0               Processes:             130
+  Usage of /:   50.1% of 6.71GB   Users logged in:       1
+  Memory usage: 36%               IPv4 address for enX0: 172.31.19.184
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+19 updates can be applied immediately.
+17 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+Enable ESM Apps to receive additional future security updates.
+See https://***.com/esm or run: sudo pro status
+
+
+time="2025-08-31T23:51:12Z" level=warning msg="/home/***/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+ Container ***-db-1  Running
+npm warn config production Use `--omit=dev` instead.
+
+up to date, audited 133 packages in 3s
+
+15 packages are looking for funding
+  run `npm fund` for details
+
+7 vulnerabilities (4 low, 3 high)
+
+To address all issues, run:
+  npm audit fix
+
+Run `npm audit` for details.
+npm notice
+npm notice New major version of npm available! 10.8.2 -> 11.5.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.5.2
+npm notice To update run: npm install -g npm@11.5.2
+npm notice
+Environment variables loaded from .env
+Error: Could not find a schema.prisma file that is required for this command.
+You can either provide it with --schema, set it as `prisma.schema` in your package.json or put it into the default location ./prisma/schema.prisma https://pris.ly/d/prisma-schema-location
+Error: Process completed with exit code 1.
+```
+¿como lo arreglamos?
+
+---
+
+_**Assistant**_
+
+El nuevo error es:
+
+```
+Error: Could not find a schema.prisma file that is required for this command.
+You can either provide it with --schema, set it as `prisma.schema` in your package.json or put it into the default location ./prisma/schema.prisma https://pris.ly/d/prisma-schema-location
+```
+
+Esto significa que **Prisma no encuentra el archivo `schema.prisma`** en la ruta esperada (`./prisma/schema.prisma`) dentro de la carpeta `` en tu instancia EC2.
+
+---
+
+## Causa
+
+En tu workflow, al crear el archivo comprimido, solo incluyes:
+
+```sh
+tar -czf backend.tar.gz backend/dist backend/package.json backend/.env backend/node_modules
+```
+
+**No incluyes la carpeta `prisma`**, por lo que al descomprimir en EC2, Prisma no encuentra el archivo `schema.prisma` ni los archivos de migración y seed.
+
+---
+
+## Solución
+
+**Incluye la carpeta `prisma` en el archivo comprimido para el despliegue.**
+
+### Modifica el paso de archivado en tu workflow:
+
+````yaml
+      - name: Archive backend build
+        run: |
+          tar -czf backend.tar.gz backend/dist backend/package.json backend/.env backend/node_modules backend/prisma
+        # Incluye los archivos necesarios para producción
+````
+
+---
+
+### Recomendación
+
+- Si tienes otros archivos de configuración necesarios para producción, inclúyelos también.
+- Mantén la estructura de carpetas igual que en tu entorno local.
+
+---
+
+**Resumen:**  
+Incluye la carpeta `` en el archivo comprimido para que Prisma pueda encontrar `schema.prisma` y ejecutar migraciones y seed correctamente.
+
+¿Listo para aplicar el cambio y probar de nuevo el pipeline?
+
+---
+
+_**User**_
+
+¿Estamos incluyendo el codigo fuente del proyecto y todos los archivos necesario para una ejecución exitosa?
+
+---
+
+_**Assistant**_
+
+Actualmente **no estás incluyendo todo el código fuente necesario** para una ejecución exitosa en producción.  
+En tu paso de archivado solo incluyes:
+
+```sh
+tar -czf backend.tar.gz backend/dist backend/package.json backend/.env backend/node_modules backend/prisma
+```
+
+### ¿Qué falta?
+
+- **El código fuente (`src/`)**: Es necesario para ejecutar migraciones, seed y para que el backend funcione correctamente (por ejemplo, si usas TypeScript y necesitas archivos fuente para debugging o para Prisma).
+- **Archivos de configuración y documentación**: Si tu backend requiere archivos como `tsconfig.json`, `jest.config.js`, etc., también deberían incluirse.
+- **Otros archivos importantes**: Como `api-spec.yaml`, `.eslintrc.js`, `.prettierrc`, etc., si son necesarios para el entorno de producción.
+
+---
+
+## Recomendación
+
+Incluye **toda la carpeta ``** en el archivo comprimido para asegurar que todos los archivos y subcarpetas estén presentes:
+
+````yaml
+      - name: Archive backend build
+        run: |
+          tar -czf backend.tar.gz backend
+        # Esto incluye todo el contenido de la carpeta backend
+````
+
+Esto garantiza que todo lo que está en tu entorno local se despliegue en EC2.
+
+---
+
+## Resumen
+
+- **Sí**: Incluye toda la carpeta `` en el archivo comprimido.
+- **No**: No incluyas solo subcarpetas o archivos específicos, podrías omitir dependencias o archivos críticos.
+
+---
+
+¿Quieres que te ayude a ajustar el workflow para que archive toda la carpeta ``?
+
+---
+
