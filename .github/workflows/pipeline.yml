@@ -1,9 +1,9 @@
 name: Backend CI/CD Pipeline
 
 on:
-  #push:
-  #  branches:
-  #    - '**' # Ejecuta en cualquier rama
+  push:
+    branches:
+      - '**' # Ejecuta en cualquier rama
   pull_request:
     types: [opened, synchronize, reopened]
 

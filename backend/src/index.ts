@@ -7,7 +7,7 @@ import positionRoutes from './routes/positionRoutes';
 import { uploadFile } from './application/services/fileUploadService';
 import cors from 'cors';
 
-//Comentario para probar CD/CI, prueba 2
+//Comentario para probar CD/CI, prueba 3
 
 // Extender la interfaz Request para incluir prisma
 declare global {
