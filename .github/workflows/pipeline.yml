@@ -1,0 +1,120 @@
+name: Backend CI/CD Pipeline
+
+on:
+  #push:
+  #  branches:
+  #    - '**' # Ejecuta en cualquier rama
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_NAME: ${{ secrets.DB_NAME }}
+      DB_PORT: ${{ secrets.DB_PORT }}
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_USER: ${{ secrets.EC2_USER }}
+      # Puedes agregar más variables si lo necesitas
+
+    steps:
+      # 1. Checkout del código fuente
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Instalación de dependencias y ejecución de pruebas
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+        working-directory: ./backend
+
+      - name: Run tests and coverage
+        run: |
+          npm run test -- --coverage
+        working-directory: ./backend
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: backend/coverage/
+
+      # 3. Build del backend
+      - name: Build backend
+        run: npm run build
+        working-directory: ./backend
+
+      # 4. Preparar archivos para despliegue
+      - name: Archive backend build
+        run: |
+          tar -czf backend.tar.gz backend/dist backend/package.json backend/.env backend/node_modules
+        # Incluye los archivos necesarios para producción
+
+      # 5. Configurar clave SSH para conexión segura a EC2
+      - name: Setup SSH key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.EC2_SSH_KEY }}
+          known_hosts: ${{ secrets.EC2_HOST }}
+
+      # 6. Limpiar versiones anteriores en EC2 y desplegar nueva versión
+      - name: Deploy to EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ env.EC2_USER }}@${{ env.EC2_HOST }} << 'EOF'
+            set -e
+            # Detener proceso Node.js anterior si existe
+            pkill node || true
+            # Eliminar versión anterior
+            rm -rf ~/ai4devs-backend
+            mkdir ~/ai4devs-backend
+          EOF
+
+          # Copiar el archivo comprimido al servidor
+          scp -o StrictHostKeyChecking=no backend.tar.gz ${{ env.EC2_USER }}@${{ env.EC2_HOST }}:~/ai4devs-backend/
+
+          # Descomprimir y preparar entorno en EC2
+          ssh -o StrictHostKeyChecking=no ${{ env.EC2_USER }}@${{ env.EC2_HOST }} << 'EOF'
+            cd ~/ai4devs-backend
+            tar -xzf backend.tar.gz
+            rm backend.tar.gz
+
+            # Levantar base de datos con Docker Compose
+            export DB_PASSWORD="${{ env.DB_PASSWORD }}"
+            export DB_USER="${{ env.DB_USER }}"
+            export DB_NAME="${{ env.DB_NAME }}"
+            export DB_PORT="${{ env.DB_PORT }}"
+            docker compose -f /home/${{ env.EC2_USER }}/docker-compose.yml up -d
+
+            # Instalar dependencias si es necesario
+            cd backend
+            npm install --production
+
+            # Ejecutar migraciones y seed de Prisma
+            npx prisma migrate deploy
+            npx prisma db seed
+
+            # Arrancar el backend en modo producción
+            nohup npm run start:prod > app.log 2>&1 &
+          EOF
+
+      # 7. Rollback automático si el despliegue falla
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ env.EC2_USER }}@${{ env.EC2_HOST }} << 'EOF'
+            echo "Despliegue fallido. Restaurando versión anterior si existe."
+            # Aquí puedes agregar lógica para restaurar desde un backup si lo implementas
+          EOF
+
+      # 8. Recomendaciones de seguridad
+      # - Usa solo claves SSH y variables como secretos.
+      # - Limita el acceso SSH en el grupo de seguridad de EC2.
+      # - Mantén actualizado el sistema operativo y dependencias en EC2.
+      # - Considera agregar monitoreo y alertas en producción.
