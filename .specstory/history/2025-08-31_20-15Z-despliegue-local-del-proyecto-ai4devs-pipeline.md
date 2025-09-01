@@ -2395,3 +2395,176 @@ Guarda el archivo, haz commit y push de los cambios para que el pipeline vuelva 
 
 ---
 
+_**User**_
+
+Ahora obtenemos el siguiete error:
+```sh
+Run ssh -o StrictHostKeyChecking=no ***@*** << 'EOF'
+Pseudo-terminal will not be allocated because stdin is not a terminal.
+Warning: Permanently added '***' (ED25519) to the list of known hosts.
+Welcome to Ubuntu 24.04.3 LTS (GNU/Linux 6.14.0-1011-aws x86_64)
+
+ * Documentation:  https://help.***.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://***.com/pro
+
+ System information as of Mon Sep  1 00:02:49 UTC 2025
+
+  System load:  0.0               Processes:             138
+  Usage of /:   52.5% of 6.71GB   Users logged in:       1
+  Memory usage: 37%               IPv4 address for enX0: 172.31.19.184
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+19 updates can be applied immediately.
+17 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+Enable ESM Apps to receive additional future security updates.
+See https://***.com/esm or run: sudo pro status
+
+
+Pseudo-terminal will not be allocated because stdin is not a terminal.
+Welcome to Ubuntu 24.04.3 LTS (GNU/Linux 6.14.0-1011-aws x86_64)
+
+ * Documentation:  https://help.***.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://***.com/pro
+
+ System information as of Mon Sep  1 00:02:49 UTC 2025
+
+  System load:  0.0               Processes:             138
+  Usage of /:   52.5% of 6.71GB   Users logged in:       1
+  Memory usage: 37%               IPv4 address for enX0: 172.31.19.184
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+19 updates can be applied immediately.
+17 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+Enable ESM Apps to receive additional future security updates.
+See https://***.com/esm or run: sudo pro status
+
+
+time="2025-09-01T00:02:54Z" level=warning msg="/home/***/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+ Container ***-db-1  Running
+npm warn config production Use `--omit=dev` instead.
+
+up to date, audited 133 packages in 3s
+
+15 packages are looking for funding
+  run `npm fund` for details
+
+7 vulnerabilities (4 low, 3 high)
+
+To address all issues, run:
+  npm audit fix
+
+Run `npm audit` for details.
+Environment variables loaded from .env
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "***", schema "public" at "localhost:***"
+
+4 migrations found in prisma/migrations
+
+
+No pending migrations to apply.
+┌─────────────────────────────────────────────────────────┐
+│  Update available 5.14.0 -> 6.15.0                      │
+│                                                         │
+│  This is a major update - please follow the guide at    │
+│  https://pris.ly/d/major-version-upgrade                │
+│                                                         │
+│  Run the following to update                            │
+│    npm i --save-dev prisma@latest                       │
+│    npm i @prisma/client@latest                          │
+└─────────────────────────────────────────────────────────┘
+Environment variables loaded from .env
+Running seed command `ts-node prisma/seed.ts` ...
+
+An error occurred while running the seed command:
+Error: Command failed with ENOENT: ts-node prisma/seed.ts
+spawn ts-node ENOENT
+Error: Process completed with exit code 1.
+```
+¿como lo solucionamos?
+
+---
+
+_**Assistant**_
+
+El error principal es:
+
+```
+Error: Command failed with ENOENT: ts-node prisma/seed.ts
+spawn ts-node ENOENT
+```
+
+Esto significa que **`ts-node` no está instalado en el entorno de producción** (EC2), porque solo se instala con las dependencias de desarrollo (`devDependencies`) y tu workflow usa `npm install --production`, que omite los paquetes de desarrollo.
+
+---
+
+## Solución
+
+Debes instalar las dependencias de desarrollo en EC2 para que `ts-node` esté disponible y el seed funcione.
+
+### 1. Cambia el comando de instalación en EC2
+
+En tu workflow, reemplaza:
+
+```sh
+npm install --production
+```
+
+por
+
+```sh
+npm install
+```
+
+Esto instalará **todas** las dependencias, incluidas las de desarrollo.
+
+---
+
+### 2. Alternativa segura (solo para seed)
+
+Si prefieres mantener el entorno más limpio, puedes instalar solo `ts-node` y `typescript` antes de ejecutar el seed:
+
+```sh
+npm install ts-node typescript @types/node --no-save
+```
+
+Pero la forma más sencilla y segura para tu caso es instalar todas las dependencias.
+
+---
+
+### 3. Ejemplo de ajuste en tu workflow
+
+````yaml
+            # Instalar dependencias (incluye devDependencies)
+            cd backend
+            npm install
+
+            # Ejecutar migraciones y seed de Prisma
+            npx prisma migrate deploy
+            npx prisma db seed
+
+            # Arrancar el backend en modo producción
+            nohup npm run start:prod > app.log 2>&1 &
+````
+
+---
+
+**Resumen:**  
+El error se debe a que `ts-node` no está disponible en EC2.  
+Solución: Instala todas las dependencias (no solo las de producción) antes de ejecutar el seed.
+
+¿Listo para aplicar el cambio y probar de nuevo el pipeline?
+
+---
+

@@ -107,7 +107,7 @@ jobs:
 
             # Instalar dependencias si es necesario
             cd backend
-            npm install --production
+            npm install
 
             # Ejecutar migraciones y seed de Prisma
             npx prisma migrate deploy
