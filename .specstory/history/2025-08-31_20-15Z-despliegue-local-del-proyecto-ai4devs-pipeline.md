@@ -2188,3 +2188,210 @@ Esto garantiza que todo lo que está en tu entorno local se despliegue en EC2.
 
 ---
 
+_**User**_
+
+Si, adelante
+
+---
+
+_**Assistant**_
+
+¡Perfecto! Aquí tienes el ajuste recomendado para tu workflow.  
+**Incluye toda la carpeta `` en el archivo comprimido** para asegurar que todos los archivos y subcarpetas necesarias estén presentes en EC2.
+
+---
+
+### Modificación en el paso de archivado
+
+Reemplaza el paso de archivado en tu archivo `pipeline.yml` por lo siguiente:
+
+````yaml
+      - name: Archive backend build
+        run: |
+          tar -czf backend.tar.gz backend
+        # Esto incluye todo el contenido de la carpeta backend
+````
+
+---
+
+### ¿Por qué este cambio?
+
+- Así aseguras que se copian todos los archivos fuente (`src/`), configuración (`.env`, `tsconfig.json`, etc.), Prisma (`prisma/`), documentación y cualquier otro archivo necesario para la ejecución y mantenimiento del backend.
+- Evitas errores por archivos faltantes en el entorno de producción.
+
+---
+
+**Siguiente paso:**  
+Haz commit y push de este cambio, luego prueba el pipeline.  
+Si surge algún error, revisa el log y compártelo para ayudarte a solucionarlo.
+
+¿Listo para probar el pipeline con este ajuste?
+
+---
+
+_**User**_
+
+Ahora obtenemos el siguiete error:
+```sh
+Run ssh -o StrictHostKeyChecking=no ***@*** << 'EOF'
+Pseudo-terminal will not be allocated because stdin is not a terminal.
+Warning: Permanently added '***' (ED25519) to the list of known hosts.
+Welcome to Ubuntu 24.04.3 LTS (GNU/Linux 6.14.0-1011-aws x86_64)
+
+ * Documentation:  https://help.***.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://***.com/pro
+
+ System information as of Sun Aug 31 23:58:00 UTC 2025
+
+  System load:  0.0               Processes:             133
+  Usage of /:   52.3% of 6.71GB   Users logged in:       1
+  Memory usage: 37%               IPv4 address for enX0: 172.31.19.184
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+19 updates can be applied immediately.
+17 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+Enable ESM Apps to receive additional future security updates.
+See https://***.com/esm or run: sudo pro status
+
+
+Pseudo-terminal will not be allocated because stdin is not a terminal.
+Welcome to Ubuntu 24.04.3 LTS (GNU/Linux 6.14.0-1011-aws x86_64)
+
+ * Documentation:  https://help.***.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://***.com/pro
+
+ System information as of Sun Aug 31 23:58:00 UTC 2025
+
+  System load:  0.0               Processes:             133
+  Usage of /:   52.3% of 6.71GB   Users logged in:       1
+  Memory usage: 37%               IPv4 address for enX0: 172.31.19.184
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+19 updates can be applied immediately.
+17 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+Enable ESM Apps to receive additional future security updates.
+See https://***.com/esm or run: sudo pro status
+
+
+time="2025-08-31T23:58:11Z" level=warning msg="/home/***/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+ Container ***-db-1  Running
+npm warn config production Use `--omit=dev` instead.
+
+up to date, audited 133 packages in 3s
+
+15 packages are looking for funding
+  run `npm fund` for details
+
+7 vulnerabilities (4 low, 3 high)
+
+To address all issues, run:
+  npm audit fix
+
+Run `npm audit` for details.
+Environment variables loaded from .env
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "***", schema "public" at "localhost:***"
+
+4 migrations found in prisma/migrations
+
+Applying migration `20240528082702_`
+Applying migration `20240528085016_`
+Applying migration `20240528110522_`
+Applying migration `20240528140846_`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20240528082702_/
+    └─ migration.sql
+  └─ 20240528085016_/
+    └─ migration.sql
+  └─ 20240528110522_/
+    └─ migration.sql
+  └─ 20240528140846_/
+    └─ migration.sql
+      
+All migrations have been successfully applied.
+Environment variables loaded from .env
+Error: To configure seeding in your project you need to add a "prisma.seed" property in your package.json with the command to execute it:
+
+1. Open the package.json of your project
+2. Add the following example to it:
+```
+"prisma": {
+  "seed": "ts-node prisma/seed.ts"
+}
+```
+If you are using ESM (ECMAScript modules):
+```
+"prisma": {
+  "seed": "node --loader ts-node/esm prisma/seed.ts"
+}
+```
+
+3. Install the required dependencies by running:
+npm i -D ts-node typescript @types/node
+
+More information in our documentation:
+https://pris.ly/d/seeding
+Error: Process completed with exit code 1.
+```
+¿como lo solucionamos?
+
+---
+
+_**Assistant**_
+
+El error indica que **Prisma no sabe cómo ejecutar el seed** porque falta la configuración `"prisma.seed"` en tu `package.json`.  
+Esto es necesario para que el comando `npx prisma db seed` funcione correctamente.
+
+---
+
+## Solución
+
+### 1. Agrega la propiedad `"prisma"` en tu `package.json` del backend
+
+Debes agregar lo siguiente dentro del objeto principal de tu `package.json`:
+
+````json
+{
+  ...existing code...
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
+  ...existing code...
+}
+````
+
+Colócalo justo antes o después de `"scripts"`, pero dentro del objeto raíz.
+
+---
+
+### 2. Verifica dependencias
+
+Ya tienes instalados `ts-node`, `typescript` y `@types/node` en tus `devDependencies`, así que no necesitas instalar nada más.
+
+---
+
+### 3. Commit y push
+
+Guarda el archivo, haz commit y push de los cambios para que el pipeline vuelva a ejecutarse y Prisma pueda correr el seed correctamente.
+
+---
+
+¿Listo para agregar la propiedad `"prisma"` y probar de nuevo el pipeline?
+
+---
+
