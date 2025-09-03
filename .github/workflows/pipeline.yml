@@ -1,0 +1,355 @@
+name: CI/CD Pipeline
+
+# Trigger: Push a una rama con Pull Request abierto
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/**'
+
+# Configuración de concurrencia para evitar despliegues simultáneos
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '18.x'
+  WORKING_DIRECTORY: './backend'
+
+jobs:
+  # Job 1: Tests del Backend
+  test:
+    name: 🧪 Tests Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+        
+      - name: 🔧 Configurar Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ env.WORKING_DIRECTORY }}/package-lock.json
+          
+      - name: 📦 Instalar dependencias
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "🔍 Instalando dependencias del backend..."
+          npm ci --prefer-offline --no-audit
+          
+      - name: 🧪 Ejecutar tests
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "🚀 Ejecutando suite de tests..."
+          npm test -- --verbose --coverage
+          
+      - name: 📊 Subir cobertura de tests
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: ${{ env.WORKING_DIRECTORY }}/coverage/
+          retention-days: 7
+
+  # Job 2: Build del Backend
+  build:
+    name: 🏗️ Build Backend
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 10
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+        
+      - name: 🔧 Configurar Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ env.WORKING_DIRECTORY }}/package-lock.json
+          
+      - name: 📦 Instalar dependencias
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "🔍 Instalando dependencias del backend..."
+          npm ci --prefer-offline --no-audit
+          
+      - name: 🏗️ Compilar TypeScript
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "🔨 Compilando código TypeScript..."
+          npm run build
+          
+      - name: ✅ Validar build
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          echo "🔍 Validando que el build se completó correctamente..."
+          if [ ! -d "dist" ]; then
+            echo "❌ Error: El directorio dist no fue creado"
+            exit 1
+          fi
+          if [ ! -f "dist/index.js" ]; then
+            echo "❌ Error: El archivo index.js no fue generado"
+            exit 1
+          fi
+          echo "✅ Build validado correctamente"
+          
+      - name: 📦 Crear artefacto de build
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            ${{ env.WORKING_DIRECTORY }}/dist/
+            ${{ env.WORKING_DIRECTORY }}/package.json
+            ${{ env.WORKING_DIRECTORY }}/package-lock.json
+            ${{ env.WORKING_DIRECTORY }}/prisma/
+          retention-days: 7
+
+  # Job 3: Despliegue en EC2
+  deploy:
+    name: 🚀 Despliegue EC2
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    timeout-minutes: 15
+    environment: production
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+        
+      - name: 📦 Descargar artefactos de build
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: ./build-output/
+          
+      - name: 🔑 Configurar clave SSH
+        run: |
+          echo "🔐 Configurando acceso SSH..."
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+          
+      - name: 🏗️ Crear estructura de directorios en EC2
+        run: |
+          echo "📁 Creando estructura de directorios..."
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} << 'EOF'
+            # Crear directorios necesarios
+            mkdir -p /home/${{ secrets.EC2_USERNAME }}/app/backend/{dist,prisma}
+            
+            # Crear backup del despliegue anterior
+            if [ -d "/home/${{ secrets.EC2_USERNAME }}/app/backend/dist" ]; then
+              echo "📦 Creando backup del despliegue anterior..."
+              cp -r /home/${{ secrets.EC2_USERNAME }}/app/backend /home/${{ secrets.EC2_USERNAME }}/app/backup-$(date +%Y%m%d-%H%M%S)
+            fi
+          EOF
+          
+      - name: 📤 Transferir archivos a EC2
+        run: |
+          echo "🚚 Transfiriendo archivos compilados..."
+          
+          # Transferir archivos de build
+          rsync -avz --delete \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            ./build-output/ \
+            ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USERNAME }}/app/backend/
+            
+          # Transferir configuración de PM2
+          scp -o StrictHostKeyChecking=no \
+            ./ecosystem.config.js \
+            ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USERNAME }}/app/
+            
+      - name: 🔧 Instalar dependencias de producción
+        run: |
+          echo "📦 Instalando dependencias de producción en EC2..."
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} << 'EOF'
+            cd /home/${{ secrets.EC2_USERNAME }}/app/backend
+            
+            # Instalar dependencias de producción
+            npm ci --only=production --prefer-offline --no-audit
+            
+            # Generar cliente de Prisma
+            npx prisma generate
+            
+            echo "✅ Dependencias instaladas correctamente"
+          EOF
+          
+      - name: 🔄 Configurar variables de entorno
+        run: |
+          echo "⚙️ Configurando variables de entorno..."
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} << 'EOF'
+            cd /home/${{ secrets.EC2_USERNAME }}/app/backend
+            
+            # Crear archivo .env
+            cat > .env << EOL
+            DATABASE_URL="${{ secrets.DATABASE_URL }}"
+            NODE_ENV=production
+            PORT=8080
+            EOL
+            
+            echo "✅ Variables de entorno configuradas"
+          EOF
+          
+      - name: 🔄 Reiniciar aplicación con PM2
+        run: |
+          echo "🔄 Reiniciando aplicación con PM2..."
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} << 'EOF'
+            cd /home/${{ secrets.EC2_USERNAME }}/app
+            
+            # Instalar PM2 globalmente si no está instalado
+            if ! command -v pm2 &> /dev/null; then
+              echo "📦 Instalando PM2..."
+              npm install -g pm2
+            fi
+            
+            # Reiniciar o iniciar la aplicación
+            if pm2 list | grep -q "backend-app"; then
+              echo "🔄 Reiniciando aplicación existente..."
+              pm2 restart backend-app
+            else
+              echo "🚀 Iniciando nueva aplicación..."
+              pm2 start ecosystem.config.js
+            fi
+            
+            # Guardar configuración de PM2
+            pm2 save
+            pm2 startup
+            
+            echo "✅ Aplicación reiniciada correctamente"
+          EOF
+          
+      - name: 🏥 Health Check
+        run: |
+          echo "🏥 Verificando que el servicio esté funcionando..."
+          
+          # Esperar un momento para que la aplicación se inicie
+          sleep 10
+          
+          # Verificar que PM2 esté ejecutando la aplicación
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} << 'EOF'
+            # Verificar estado en PM2
+            if ! pm2 list | grep -q "online.*backend-app"; then
+              echo "❌ Error: La aplicación no está ejecutándose en PM2"
+              pm2 logs backend-app --lines 20
+              exit 1
+            fi
+            
+            echo "✅ Aplicación ejecutándose correctamente en PM2"
+          EOF
+          
+          # Verificar que la aplicación responda en el puerto 8080
+          max_attempts=5
+          attempt=1
+          
+          while [ $attempt -le $max_attempts ]; do
+            echo "🔍 Intento $attempt/$max_attempts - Verificando endpoint de salud..."
+            
+            if ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
+               "curl -f -s http://localhost:8080/health || curl -f -s http://localhost:8080/ || exit 1"; then
+              echo "✅ Aplicación respondiendo correctamente"
+              break
+            fi
+            
+            if [ $attempt -eq $max_attempts ]; then
+              echo "❌ Error: La aplicación no responde después de $max_attempts intentos"
+              
+              # Mostrar logs para debugging
+              ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
+                "pm2 logs backend-app --lines 20"
+              exit 1
+            fi
+            
+            echo "⏳ Esperando 10 segundos antes del siguiente intento..."
+            sleep 10
+            attempt=$((attempt + 1))
+          done
+          
+      - name: 🧹 Limpiar backups antiguos
+        run: |
+          echo "🧹 Limpiando backups antiguos..."
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} << 'EOF'
+            cd /home/${{ secrets.EC2_USERNAME }}/app
+            
+            # Mantener solo los últimos 3 backups
+            ls -t backup-* 2>/dev/null | tail -n +4 | xargs -r rm -rf
+            
+            echo "✅ Limpieza de backups completada"
+          EOF
+          
+      - name: 📊 Resumen del despliegue
+        run: |
+          echo "📊 === RESUMEN DEL DESPLIEGUE ==="
+          echo "✅ Tests ejecutados correctamente"
+          echo "✅ Build compilado exitosamente"
+          echo "✅ Archivos transferidos a EC2"
+          echo "✅ Dependencias instaladas"
+          echo "✅ Aplicación reiniciada con PM2"
+          echo "✅ Health check pasado"
+          echo "🚀 Despliegue completado exitosamente"
+
+  # Job 4: Rollback en caso de fallo
+  rollback:
+    name: 🔙 Rollback
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: failure()
+    timeout-minutes: 5
+    
+    steps:
+      - name: 🔑 Configurar clave SSH
+        run: |
+          echo "🔐 Configurando acceso SSH para rollback..."
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+          
+      - name: 🔙 Ejecutar rollback
+        run: |
+          echo "🔙 Ejecutando rollback al despliegue anterior..."
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} << 'EOF'
+            cd /home/${{ secrets.EC2_USERNAME }}/app
+            
+            # Buscar el backup más reciente
+            latest_backup=$(ls -t backup-* 2>/dev/null | head -n 1)
+            
+            if [ -n "$latest_backup" ]; then
+              echo "📦 Restaurando desde backup: $latest_backup"
+              
+              # Hacer backup del despliegue fallido
+              mv backend backend-failed-$(date +%Y%m%d-%H%M%S)
+              
+              # Restaurar desde backup
+              cp -r "$latest_backup" backend
+              
+              # Reiniciar PM2
+              cd backend
+              pm2 restart backend-app
+              
+              echo "✅ Rollback completado exitosamente"
+            else
+              echo "⚠️ No se encontraron backups para rollback"
+            fi
+          EOF
+
+# Notificaciones (opcional - requiere configuración adicional)
+  notify:
+    name: 📢 Notificaciones
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: always()
+    
+    steps:
+      - name: 📢 Notificar resultado
+        run: |
+          if [ "${{ needs.deploy.result }}" == "success" ]; then
+            echo "✅ Despliegue exitoso - Aplicación funcionando correctamente"
+          else
+            echo "❌ Despliegue fallido - Revisar logs para más detalles"
+          fi
