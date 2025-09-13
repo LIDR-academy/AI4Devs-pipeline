@@ -11,83 +11,83 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout the files
-      uses: actions/checkout@v2
-      
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: backend/package-lock.json
-        
-    - name: Install dependencies
-      working-directory: ./backend
-      run: npm ci
-      
-    - name: Run Prisma generate
-      working-directory: ./backend
-      run: npx prisma generate
-      
-    - name: Run tests
-      working-directory: ./backend
-      run: npm test
-      env:
-        NODE_ENV: test
-        
-    - name: Build backend application
-      working-directory: ./backend
-      run: npm run build
-      
-    - name: Setup Node.js for frontend
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
-        
-    - name: Install frontend dependencies
-      working-directory: ./frontend
-      run: npm ci
-      
-    - name: Build frontend application
-      working-directory: ./frontend
-      run: npm run build
-      
-    - name: Deploy to Server
-      uses: easingthemes/ssh-deploy@main
-      env:
-        SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-        REMOTE_HOST: ${{ secrets.HOST_DNS }}
-        REMOTE_USER: ${{ secrets.USERNAME }}
-        TARGET: ${{ secrets.TARGET_DIR }}
-        SOURCE: "backend/"
+      - name: Checkout the files
+        uses: actions/checkout@v4
 
-    - name: Deploy Docker Compose
-      uses: easingthemes/ssh-deploy@main
-      env:
-        SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-        REMOTE_HOST: ${{ secrets.HOST_DNS }}
-        REMOTE_USER: ${{ secrets.USERNAME }}
-        TARGET: ${{ secrets.TARGET_DIR }}
-        SOURCE: "docker-compose.yml"
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
 
-    - name: Deploy Frontend
-      uses: easingthemes/ssh-deploy@main
-      env:
-        SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-        REMOTE_HOST: ${{ secrets.HOST_DNS }}
-        REMOTE_USER: ${{ secrets.USERNAME }}
-        TARGET: ${{ secrets.TARGET_DIR }}
-        SOURCE: "frontend/build/"
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm ci
 
-    - name: Setup and Start Services
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.HOST_DNS }}
-        username: ${{ secrets.USERNAME }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        port: 22
+      - name: Run Prisma generate
+        working-directory: ./backend
+        run: npx prisma generate
+
+      - name: Run tests
+        working-directory: ./backend
+        run: npm test
+        env:
+          NODE_ENV: test
+
+      - name: Build backend application
+        working-directory: ./backend
+        run: npm run build
+
+      - name: Setup Node.js for frontend
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Build frontend application
+        working-directory: ./frontend
+        run: npm run build
+
+      - name: Deploy to Server
+        uses: easingthemes/ssh-deploy@main
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          REMOTE_HOST: ${{ secrets.HOST_DNS }}
+          REMOTE_USER: ${{ secrets.USERNAME }}
+          TARGET: ${{ secrets.TARGET_DIR }}
+          SOURCE: "backend/"
+
+      - name: Deploy Docker Compose
+        uses: easingthemes/ssh-deploy@main
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          REMOTE_HOST: ${{ secrets.HOST_DNS }}
+          REMOTE_USER: ${{ secrets.USERNAME }}
+          TARGET: ${{ secrets.TARGET_DIR }}
+          SOURCE: "docker-compose.yml"
+
+      - name: Deploy Frontend
+        uses: easingthemes/ssh-deploy@main
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          REMOTE_HOST: ${{ secrets.HOST_DNS }}
+          REMOTE_USER: ${{ secrets.USERNAME }}
+          TARGET: ${{ secrets.TARGET_DIR }}
+          SOURCE: "frontend/build/"
+
+      - name: Setup and Start Services
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST_DNS }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
         script: |
           cd ${{ secrets.TARGET_DIR }}
           
@@ -106,26 +106,23 @@ jobs:
             sudo chmod +x /usr/local/bin/docker-compose
           fi
           
-          # El archivo .env para Docker Compose ya está configurado en el servidor
-          echo "Verificando configuración de Docker Compose..."
+          # Los archivos .env ya están configurados en el servidor
+          echo "Verificando archivos .env existentes..."
           cat .env
+          cat backend/.env
           
           # Iniciar la base de datos con Docker Compose
           echo "Iniciando base de datos..."
-          sudo docker-compose up -d db
+          sudo docker-compose down || true
+          sudo docker-compose up -d
           
           # Esperar a que la base de datos esté lista
           echo "Esperando a que la base de datos esté lista..."
           sleep 30
           
-          # Verificar estructura de directorios
-          echo "Estructura de directorios:"
-          ls -la
-          
-          # Los archivos .env ya están configurados en el servidor
-          echo "Verificando archivos .env existentes..."
-          cat .env
-          cat backend/.env
+          # Verificar que la base de datos esté funcionando
+          echo "Verificando conexión a la base de datos..."
+          sudo docker exec ai4devs-pipeline-db-1 psql -U LTIdbUser -d LTIdb -c 'SELECT version();' || echo "Error conectando a la base de datos"
           
           # Instalar dependencias de producción
           cd backend
@@ -156,46 +153,47 @@ jobs:
           
           # Configurar Nginx para frontend y backend
           echo "Configurando Nginx..."
-          sudo tee /etc/nginx/sites-available/ai4devs << EOF
+          sudo tee /etc/nginx/sites-available/default > /dev/null << 'EOF'
           server {
-              listen 80;
-              server_name ${{ secrets.HOST_DNS }};
+              listen 80 default_server;
+              listen [::]:80 default_server;
               
-              # Frontend (React)
+              root /home/ubuntu/ai4devs-pipeline/build;
+              index index.html;
+              
+              server_name _;
+              
+              # Frontend
               location / {
-                  root /home/ubuntu/ai4devs-pipeline/build;
-                  index index.html;
-                  try_files \$uri \$uri/ /index.html;
+                  try_files $uri $uri/ /index.html;
               }
               
               # Backend API
               location /api {
                   proxy_pass http://localhost:3010;
                   proxy_http_version 1.1;
-                  proxy_set_header Upgrade \$http_upgrade;
+                  proxy_set_header Upgrade $http_upgrade;
                   proxy_set_header Connection 'upgrade';
-                  proxy_set_header Host \$host;
-                  proxy_set_header X-Real-IP \$remote_addr;
-                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                  proxy_set_header X-Forwarded-Proto \$scheme;
-                  proxy_cache_bypass \$http_upgrade;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+                  proxy_cache_bypass $http_upgrade;
               }
               
               # Health check
               location /health {
                   proxy_pass http://localhost:3010/health;
                   proxy_http_version 1.1;
-                  proxy_set_header Host \$host;
-                  proxy_set_header X-Real-IP \$remote_addr;
-                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                  proxy_set_header X-Forwarded-Proto \$scheme;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
               }
           }
           EOF
           
-          # Habilitar el sitio
-          sudo ln -sf /etc/nginx/sites-available/ai4devs /etc/nginx/sites-enabled/
-          sudo rm -f /etc/nginx/sites-enabled/default
+          # Verificar configuración y recargar Nginx
           sudo nginx -t
           sudo systemctl reload nginx
           
@@ -215,7 +213,9 @@ jobs:
           echo "Verificando frontend..."
           if [ -d "/home/ubuntu/ai4devs-pipeline/build" ]; then
             echo "✅ Frontend desplegado correctamente!"
-            echo "🌐 Aplicación completa disponible en: http://${{ secrets.HOST_DNS }}"
+            echo "🌐 Frontend disponible en: http://${{ secrets.HOST_DNS }}"
+            echo "🔧 Backend API disponible en: http://${{ secrets.HOST_DNS }}/api"
+            echo "❤️ Health check disponible en: http://${{ secrets.HOST_DNS }}/health"
           else
             echo "❌ Error: Frontend no encontrado"
           fi
