@@ -101,7 +101,7 @@ Esto iniciará una base de datos PostgreSQL en un contenedor Docker. La bandera 
 
 Para acceder a la base de datos PostgreSQL, puedes usar cualquier cliente PostgreSQL con los siguientes detalles de conexión:
 - Host: localhost
-- Port: 5432
+- Port: 5437
 - User: postgres
 - Password: password
 - Database: mydatabase
@@ -201,7 +201,7 @@ Para ejecutar este proyecto en una instancia EC2 y asegurarte de que GitHub Acti
 4. **Configurar Variables de Entorno**:
   - Crea un archivo `.env` en el directorio raíz del backend con las siguientes variables:
     ```
-    DATABASE_URL=postgresql://user:password@localhost:5432/mydatabase
+    DATABASE_URL=postgresql://user:password@localhost:5437/mydatabase
     ```
   - Asegúrate de reemplazar `user`, `password` y `mydatabase` con los valores correctos.
 

@@ -85,7 +85,7 @@ Para ejecutar este proyecto en una instancia EC2 y asegurarte de que GitHub Acti
 4. **Configurar Variables de Entorno**:
     - Crea un archivo `.env` en el directorio raíz del backend con las siguientes variables:
       ```
-      DATABASE_URL=postgresql://user:password@localhost:5432/mydatabase
+      DATABASE_URL=postgresql://user:password@localhost:5437/mydatabase
       ```
     - Asegúrate de reemplazar `user`, `password` y `mydatabase` con los valores correctos.
 
