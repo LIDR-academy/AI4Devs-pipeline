@@ -57,6 +57,26 @@ app.get('/', (req, res) => {
   res.send('Hola LTI!');
 });
 
+// Health check endpoint
+app.get('/health', async (req, res) => {
+  try {
+    // Verificar conexión a la base de datos
+    await prisma.$queryRaw`SELECT 1`;
+    res.status(200).json({ 
+      status: 'OK', 
+      message: 'Backend is running and database is connected',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      status: 'ERROR', 
+      message: 'Database connection failed',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   console.error(err.stack);
   res.type('text/plain');

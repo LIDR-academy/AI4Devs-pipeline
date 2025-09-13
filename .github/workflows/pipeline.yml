@@ -47,3 +47,99 @@ jobs:
         REMOTE_USER: ${{ secrets.USERNAME }}
         TARGET: ${{ secrets.TARGET_DIR }}
         SOURCE: "backend/"
+
+    - name: Deploy Docker Compose
+      uses: easingthemes/ssh-deploy@main
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+        REMOTE_HOST: ${{ secrets.HOST_DNS }}
+        REMOTE_USER: ${{ secrets.USERNAME }}
+        TARGET: ${{ secrets.TARGET_DIR }}
+        SOURCE: "docker-compose.yml"
+
+    - name: Setup and Start Services
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.HOST_DNS }}
+        username: ${{ secrets.USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        port: 22
+        script: |
+          cd ${{ secrets.TARGET_DIR }}
+          
+          # Instalar Docker si no está instalado
+          if ! command -v docker &> /dev/null; then
+            echo "Instalando Docker..."
+            curl -fsSL https://get.docker.com -o get-docker.sh
+            sudo sh get-docker.sh
+            sudo usermod -aG docker ubuntu
+          fi
+          
+          # Instalar Docker Compose si no está instalado
+          if ! command -v docker-compose &> /dev/null; then
+            echo "Instalando Docker Compose..."
+            sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+            sudo chmod +x /usr/local/bin/docker-compose
+          fi
+          
+          # Crear archivo .env para Docker Compose
+          cat > .env << EOF
+          DB_PASSWORD=ai4devs_password
+          DB_USER=ai4devs_user
+          DB_NAME=ai4devs_db
+          DB_PORT=5437
+          EOF
+          
+          # Iniciar la base de datos con Docker Compose
+          echo "Iniciando base de datos..."
+          sudo docker-compose up -d db
+          
+          # Esperar a que la base de datos esté lista
+          echo "Esperando a que la base de datos esté lista..."
+          sleep 30
+          
+          # Configurar variables de entorno para la aplicación
+          cat > backend/.env << EOF
+          NODE_ENV=production
+          PORT=3010
+          DATABASE_URL=postgresql://ai4devs_user:ai4devs_password@localhost:5437/ai4devs_db
+          EOF
+          
+          # Instalar dependencias de producción
+          cd backend
+          npm ci --only=production
+          
+          # Ejecutar migraciones de Prisma
+          echo "Ejecutando migraciones de Prisma..."
+          npx prisma migrate deploy
+          
+          # Generar cliente de Prisma
+          npx prisma generate
+          
+          # Detener aplicación anterior si existe
+          pm2 stop ai4devs-backend || true
+          pm2 delete ai4devs-backend || true
+          
+          # Iniciar la aplicación
+          echo "Iniciando aplicación..."
+          pm2 start dist/index.js --name ai4devs-backend
+          pm2 save
+          
+          # Esperar a que la aplicación esté lista
+          sleep 10
+          
+          # Verificar que la aplicación esté corriendo
+          echo "Verificando estado de la aplicación..."
+          pm2 status
+          
+          # Health check
+          echo "Realizando health check..."
+          for i in {1..5}; do
+            if curl -f http://localhost:3010/health; then
+              echo "✅ Aplicación desplegada y funcionando correctamente!"
+              break
+            else
+              echo "⏳ Esperando que la aplicación esté lista... (intento $i/5)"
+              sleep 10
+            fi
+          done
