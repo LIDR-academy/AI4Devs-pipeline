@@ -92,13 +92,18 @@
 
    adapta el archivo que creaste en función de esas instrucciones, y antes, prueba de manera local que los test y el build de back funcionen
    ```
+   ```
+4. **Solicitud de correcciones YAML y verificación:**
+   ```
+   te pasare unas correcciones adicionales:
 
-4. **Solicitud de reintento:**
-   ```
-   reintenta por favor
-   ```
+   Fix YAML indentation and trailing spaces.
 
-5. **Solicitud de simplificación:**
-   ```
-   solo prioriza los cambios en el pipeline, no crees scripts, bórralos por favor
-   ```
+   Current YAML fails linters (wrong indentation and trailing spaces). Normalize spacing on steps and remove trailing spaces on Lines 12,16,23,27,31,37,41.
+
+   🛠️ Refactor suggestion
+
+   Upgrade checkout action to v4.
+
+   v2 is deprecated on new runners. Also fix list indentation under steps.
+
