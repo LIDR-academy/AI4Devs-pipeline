@@ -89,133 +89,133 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           port: 22
           script: |
-          cd ${{ secrets.TARGET_DIR }}
-          
-          # Instalar Docker si no está instalado
-          if ! command -v docker &> /dev/null; then
-            echo "Instalando Docker..."
-            curl -fsSL https://get.docker.com -o get-docker.sh
-            sudo sh get-docker.sh
-            sudo usermod -aG docker ubuntu
-          fi
-          
-          # Instalar Docker Compose si no está instalado
-          if ! command -v docker-compose &> /dev/null; then
-            echo "Instalando Docker Compose..."
-            sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-            sudo chmod +x /usr/local/bin/docker-compose
-          fi
-          
-          # Los archivos .env ya están configurados en el servidor
-          echo "Verificando archivos .env existentes..."
-          cat .env
-          cat backend/.env
-          
-          # Iniciar la base de datos con Docker Compose
-          echo "Iniciando base de datos..."
-          sudo docker-compose down || true
-          sudo docker-compose up -d
-          
-          # Esperar a que la base de datos esté lista
-          echo "Esperando a que la base de datos esté lista..."
-          sleep 30
-          
-          # Verificar que la base de datos esté funcionando
-          echo "Verificando conexión a la base de datos..."
-          sudo docker exec ai4devs-pipeline-db-1 psql -U LTIdbUser -d LTIdb -c 'SELECT version();' || echo "Error conectando a la base de datos"
-          
-          # Instalar dependencias de producción
-          cd backend
-          npm ci --only=production
-          
-          # Ejecutar migraciones de Prisma
-          echo "Ejecutando migraciones de Prisma..."
-          npx prisma migrate deploy
-          
-          # Generar cliente de Prisma
-          npx prisma generate
-          
-          # Detener aplicación anterior si existe
-          pm2 stop ai4devs-backend || true
-          pm2 delete ai4devs-backend || true
-          
-          # Iniciar la aplicación
-          echo "Iniciando aplicación..."
-          pm2 start dist/index.js --name ai4devs-backend
-          pm2 save
-          
-          # Esperar a que la aplicación esté lista
-          sleep 10
-          
-          # Verificar que la aplicación esté corriendo
-          echo "Verificando estado de la aplicación..."
-          pm2 status
-          
-          # Configurar Nginx para frontend y backend
-          echo "Configurando Nginx..."
-          sudo tee /etc/nginx/sites-available/default > /dev/null << 'EOF'
-          server {
-              listen 80 default_server;
-              listen [::]:80 default_server;
-              
-              root /home/ubuntu/ai4devs-pipeline/build;
-              index index.html;
-              
-              server_name _;
-              
-              # Frontend
-              location / {
-                  try_files $uri $uri/ /index.html;
-              }
-              
-              # Backend API
-              location /api {
-                  proxy_pass http://localhost:3010;
-                  proxy_http_version 1.1;
-                  proxy_set_header Upgrade $http_upgrade;
-                  proxy_set_header Connection 'upgrade';
-                  proxy_set_header Host $host;
-                  proxy_set_header X-Real-IP $remote_addr;
-                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                  proxy_set_header X-Forwarded-Proto $scheme;
-                  proxy_cache_bypass $http_upgrade;
-              }
-              
-              # Health check
-              location /health {
-                  proxy_pass http://localhost:3010/health;
-                  proxy_http_version 1.1;
-                  proxy_set_header Host $host;
-                  proxy_set_header X-Real-IP $remote_addr;
-                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                  proxy_set_header X-Forwarded-Proto $scheme;
-              }
-          }
-          EOF
-          
-          # Verificar configuración y recargar Nginx
-          sudo nginx -t
-          sudo systemctl reload nginx
-          
-          # Health check
-          echo "Realizando health check..."
-          for i in {1..5}; do
-            if curl -f http://localhost:3010/health; then
-              echo "✅ Backend desplegado y funcionando correctamente!"
-              break
-            else
-              echo "⏳ Esperando que el backend esté lista... (intento $i/5)"
-              sleep 10
+            cd ${{ secrets.TARGET_DIR }}
+            
+            # Instalar Docker si no está instalado
+            if ! command -v docker &> /dev/null; then
+              echo "Instalando Docker..."
+              curl -fsSL https://get.docker.com -o get-docker.sh
+              sudo sh get-docker.sh
+              sudo usermod -aG docker ubuntu
             fi
-          done
-          
-          # Verificar frontend
-          echo "Verificando frontend..."
-          if [ -d "/home/ubuntu/ai4devs-pipeline/build" ]; then
-            echo "✅ Frontend desplegado correctamente!"
-            echo "🌐 Frontend disponible en: http://${{ secrets.HOST_DNS }}"
-            echo "🔧 Backend API disponible en: http://${{ secrets.HOST_DNS }}/api"
-            echo "❤️ Health check disponible en: http://${{ secrets.HOST_DNS }}/health"
-          else
-            echo "❌ Error: Frontend no encontrado"
-          fi
+            
+            # Instalar Docker Compose si no está instalado
+            if ! command -v docker-compose &> /dev/null; then
+              echo "Instalando Docker Compose..."
+              sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              sudo chmod +x /usr/local/bin/docker-compose
+            fi
+            
+            # Los archivos .env ya están configurados en el servidor
+            echo "Verificando archivos .env existentes..."
+            cat .env
+            cat backend/.env
+            
+            # Iniciar la base de datos con Docker Compose
+            echo "Iniciando base de datos..."
+            sudo docker-compose down || true
+            sudo docker-compose up -d
+            
+            # Esperar a que la base de datos esté lista
+            echo "Esperando a que la base de datos esté lista..."
+            sleep 30
+            
+            # Verificar que la base de datos esté funcionando
+            echo "Verificando conexión a la base de datos..."
+            sudo docker exec ai4devs-pipeline-db-1 psql -U LTIdbUser -d LTIdb -c 'SELECT version();' || echo "Error conectando a la base de datos"
+            
+            # Instalar dependencias de producción
+            cd backend
+            npm ci --only=production
+            
+            # Ejecutar migraciones de Prisma
+            echo "Ejecutando migraciones de Prisma..."
+            npx prisma migrate deploy
+            
+            # Generar cliente de Prisma
+            npx prisma generate
+            
+            # Detener aplicación anterior si existe
+            pm2 stop ai4devs-backend || true
+            pm2 delete ai4devs-backend || true
+            
+            # Iniciar la aplicación
+            echo "Iniciando aplicación..."
+            pm2 start dist/index.js --name ai4devs-backend
+            pm2 save
+            
+            # Esperar a que la aplicación esté lista
+            sleep 10
+            
+            # Verificar que la aplicación esté corriendo
+            echo "Verificando estado de la aplicación..."
+            pm2 status
+            
+            # Configurar Nginx para frontend y backend
+            echo "Configurando Nginx..."
+            sudo tee /etc/nginx/sites-available/default > /dev/null << 'EOF'
+            server {
+                listen 80 default_server;
+                listen [::]:80 default_server;
+                
+                root /home/ubuntu/ai4devs-pipeline/build;
+                index index.html;
+                
+                server_name _;
+                
+                # Frontend
+                location / {
+                    try_files $uri $uri/ /index.html;
+                }
+                
+                # Backend API
+                location /api {
+                    proxy_pass http://localhost:3010;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade $http_upgrade;
+                    proxy_set_header Connection 'upgrade';
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                    proxy_cache_bypass $http_upgrade;
+                }
+                
+                # Health check
+                location /health {
+                    proxy_pass http://localhost:3010/health;
+                    proxy_http_version 1.1;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                }
+            }
+            EOF
+            
+            # Verificar configuración y recargar Nginx
+            sudo nginx -t
+            sudo systemctl reload nginx
+            
+            # Health check
+            echo "Realizando health check..."
+            for i in {1..5}; do
+              if curl -f http://localhost:3010/health; then
+                echo "✅ Backend desplegado y funcionando correctamente!"
+                break
+              else
+                echo "⏳ Esperando que el backend esté lista... (intento $i/5)"
+                sleep 10
+              fi
+            done
+            
+            # Verificar frontend
+            echo "Verificando frontend..."
+            if [ -d "/home/ubuntu/ai4devs-pipeline/build" ]; then
+              echo "✅ Frontend desplegado correctamente!"
+              echo "🌐 Frontend disponible en: http://${{ secrets.HOST_DNS }}"
+              echo "🔧 Backend API disponible en: http://${{ secrets.HOST_DNS }}/api"
+              echo "❤️ Health check disponible en: http://${{ secrets.HOST_DNS }}/health"
+            else
+              echo "❌ Error: Frontend no encontrado"
+            fi
