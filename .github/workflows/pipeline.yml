@@ -35,8 +35,23 @@ jobs:
       env:
         NODE_ENV: test
         
-    - name: Build application
+    - name: Build backend application
       working-directory: ./backend
+      run: npm run build
+      
+    - name: Setup Node.js for frontend
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Install frontend dependencies
+      working-directory: ./frontend
+      run: npm ci
+      
+    - name: Build frontend application
+      working-directory: ./frontend
       run: npm run build
       
     - name: Deploy to Server
@@ -56,6 +71,15 @@ jobs:
         REMOTE_USER: ${{ secrets.USERNAME }}
         TARGET: ${{ secrets.TARGET_DIR }}
         SOURCE: "docker-compose.yml"
+
+    - name: Deploy Frontend
+      uses: easingthemes/ssh-deploy@main
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+        REMOTE_HOST: ${{ secrets.HOST_DNS }}
+        REMOTE_USER: ${{ secrets.USERNAME }}
+        TARGET: ${{ secrets.TARGET_DIR }}
+        SOURCE: "frontend/build/"
 
     - name: Setup and Start Services
       uses: appleboy/ssh-action@v1.0.3
@@ -82,13 +106,9 @@ jobs:
             sudo chmod +x /usr/local/bin/docker-compose
           fi
           
-          # Crear archivo .env para Docker Compose
-          cat > .env << EOF
-          DB_PASSWORD=ai4devs_password
-          DB_USER=ai4devs_user
-          DB_NAME=ai4devs_db
-          DB_PORT=5437
-          EOF
+          # El archivo .env para Docker Compose ya está configurado en el servidor
+          echo "Verificando configuración de Docker Compose..."
+          cat .env
           
           # Iniciar la base de datos con Docker Compose
           echo "Iniciando base de datos..."
@@ -98,12 +118,14 @@ jobs:
           echo "Esperando a que la base de datos esté lista..."
           sleep 30
           
-          # Configurar variables de entorno para la aplicación
-          cat > backend/.env << EOF
-          NODE_ENV=production
-          PORT=3010
-          DATABASE_URL=postgresql://ai4devs_user:ai4devs_password@localhost:5437/ai4devs_db
-          EOF
+          # Verificar estructura de directorios
+          echo "Estructura de directorios:"
+          ls -la
+          
+          # Los archivos .env ya están configurados en el servidor
+          echo "Verificando archivos .env existentes..."
+          cat .env
+          cat backend/.env
           
           # Instalar dependencias de producción
           cd backend
@@ -132,14 +154,68 @@ jobs:
           echo "Verificando estado de la aplicación..."
           pm2 status
           
+          # Configurar Nginx para frontend y backend
+          echo "Configurando Nginx..."
+          sudo tee /etc/nginx/sites-available/ai4devs << EOF
+          server {
+              listen 80;
+              server_name ${{ secrets.HOST_DNS }};
+              
+              # Frontend (React)
+              location / {
+                  root /home/ubuntu/ai4devs-pipeline/build;
+                  index index.html;
+                  try_files \$uri \$uri/ /index.html;
+              }
+              
+              # Backend API
+              location /api {
+                  proxy_pass http://localhost:3010;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade \$http_upgrade;
+                  proxy_set_header Connection 'upgrade';
+                  proxy_set_header Host \$host;
+                  proxy_set_header X-Real-IP \$remote_addr;
+                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto \$scheme;
+                  proxy_cache_bypass \$http_upgrade;
+              }
+              
+              # Health check
+              location /health {
+                  proxy_pass http://localhost:3010/health;
+                  proxy_http_version 1.1;
+                  proxy_set_header Host \$host;
+                  proxy_set_header X-Real-IP \$remote_addr;
+                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto \$scheme;
+              }
+          }
+          EOF
+          
+          # Habilitar el sitio
+          sudo ln -sf /etc/nginx/sites-available/ai4devs /etc/nginx/sites-enabled/
+          sudo rm -f /etc/nginx/sites-enabled/default
+          sudo nginx -t
+          sudo systemctl reload nginx
+          
           # Health check
           echo "Realizando health check..."
           for i in {1..5}; do
             if curl -f http://localhost:3010/health; then
-              echo "✅ Aplicación desplegada y funcionando correctamente!"
+              echo "✅ Backend desplegado y funcionando correctamente!"
               break
             else
-              echo "⏳ Esperando que la aplicación esté lista... (intento $i/5)"
+              echo "⏳ Esperando que el backend esté lista... (intento $i/5)"
               sleep 10
             fi
           done
+          
+          # Verificar frontend
+          echo "Verificando frontend..."
+          if [ -d "/home/ubuntu/ai4devs-pipeline/build" ]; then
+            echo "✅ Frontend desplegado correctamente!"
+            echo "🌐 Aplicación completa disponible en: http://${{ secrets.HOST_DNS }}"
+          else
+            echo "❌ Error: Frontend no encontrado"
+          fi
