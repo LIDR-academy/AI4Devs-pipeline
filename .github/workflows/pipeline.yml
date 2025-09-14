@@ -1,0 +1,233 @@
+name: LTI Pipeline - Backend Deploy
+
+# Trigger: Push a una rama con Pull Request abierto
+on:
+  push:
+    branches: 
+      - pipeline-solved-sp
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize]
+
+jobs:
+  # Job 1: Tests de Backend
+  test-backend:
+    name: 🧪 Tests de Backend
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - name: 📥 Checkout código
+      uses: actions/checkout@v4
+
+    - name: 🟢 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: backend/package-lock.json
+
+    - name: 📦 Instalar dependencias backend
+      run: |
+        cd backend
+        npm ci
+
+    - name: 🗄️ Configurar base de datos de test
+      run: |
+        cd backend
+        echo "DATABASE_URL=\"postgresql://postgres:postgres@localhost:5432/test_db\"" > .env
+        npx prisma generate
+        npx prisma db push
+
+    - name: 🧪 Ejecutar tests de backend
+      run: |
+        cd backend
+        npm test
+
+  # Job 2: Build de Backend
+  build-backend:
+    name: 🏗️ Build de Backend
+    runs-on: ubuntu-latest
+    needs: test-backend
+    
+    steps:
+    - name: 📥 Checkout código
+      uses: actions/checkout@v4
+
+    - name: 🟢 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: backend/package-lock.json
+
+    - name: 📦 Instalar dependencias backend
+      run: |
+        cd backend
+        npm ci
+
+    - name: 🏗️ Compilar backend
+      run: |
+        cd backend
+        npm run build
+
+    - name: 📦 Crear artefacto de build
+      run: |
+        cd backend
+        tar -czf backend-build.tar.gz dist/ node_modules/ package.json package-lock.json prisma/
+        
+    - name: 💾 Subir artefacto
+      uses: actions/upload-artifact@v4
+      with:
+        name: backend-build
+        path: backend/backend-build.tar.gz
+        retention-days: 1
+
+  # Job 3: Despliegue en EC2
+  deploy-backend:
+    name: 🚀 Despliegue en EC2
+    runs-on: ubuntu-latest
+    needs: build-backend
+    if: github.event_name == 'push' && github.ref == 'refs/heads/pipeline-solved-sp'
+    
+    steps:
+    - name: 📥 Checkout código
+      uses: actions/checkout@v4
+
+    - name: 📦 Descargar artefacto de build
+      uses: actions/download-artifact@v4
+      with:
+        name: backend-build
+        path: ./build-artifact
+
+    - name: 🔑 Configurar SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.EC2_PRIVATE_KEY }}" > ~/.ssh/ec2_key.pem
+        chmod 600 ~/.ssh/ec2_key.pem
+        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+    - name: 🗄️ Configurar PostgreSQL en EC2
+      run: |
+        ssh -i ~/.ssh/ec2_key.pem ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
+        # Actualizar sistema
+        sudo dnf update -y
+        
+        # Instalar PostgreSQL
+        sudo dnf install -y postgresql15-server postgresql15
+        
+        # Inicializar PostgreSQL
+        sudo postgresql-setup --initdb
+        sudo systemctl enable postgresql
+        sudo systemctl start postgresql
+        
+        # Configurar usuario y base de datos
+        sudo -u postgres psql -c "CREATE USER LTIdbUser WITH PASSWORD 'D1ymf8wyQEGthFR1E9xhCq';"
+        sudo -u postgres psql -c "CREATE DATABASE LTIdb OWNER LTIdbUser;"
+        sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE LTIdb TO LTIdbUser;"
+        
+        # Configurar PostgreSQL para conexiones externas
+        sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /var/lib/pgsql/data/postgresql.conf
+        sudo sed -i "s/local   all             all                                     peer/local   all             all                                     md5/" /var/lib/pgsql/data/pg_hba.conf
+        echo "host    all             all             0.0.0.0/0               md5" | sudo tee -a /var/lib/pgsql/data/pg_hba.conf
+        
+        # Reiniciar PostgreSQL
+        sudo systemctl restart postgresql
+        
+        echo "PostgreSQL configurado exitosamente"
+        EOF
+
+    - name: 🚀 Desplegar backend en EC2
+      run: |
+        # Extraer build en servidor
+        ssh -i ~/.ssh/ec2_key.pem ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
+        # Limpiar directorio anterior
+        rm -rf /home/ec2-user/lti-backend
+        mkdir -p /home/ec2-user/lti-backend
+        
+        # Crear archivo .env
+        cat > /home/ec2-user/lti-backend/.env << 'ENVEOF'
+        DATABASE_URL="postgresql://LTIdbUser:D1ymf8wyQEGthFR1E9xhCq@localhost:5432/LTIdb"
+        HOST=0.0.0.0
+        PORT=3010
+        NODE_ENV=production
+        ENVEOF
+        EOF
+        
+        # Transferir build
+        scp -i ~/.ssh/ec2_key.pem ./build-artifact/backend-build.tar.gz ec2-user@${{ secrets.EC2_HOST }}:/home/ec2-user/lti-backend/
+        
+        # Configurar y ejecutar aplicación
+        ssh -i ~/.ssh/ec2_key.pem ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
+        cd /home/ec2-user/lti-backend
+        
+        # Extraer build
+        tar -xzf backend-build.tar.gz
+        
+        # Generar cliente Prisma
+        npx prisma generate
+        
+        # Aplicar esquema a base de datos
+        npx prisma db push
+        
+        # Detener proceso anterior si existe
+        pkill -f "node.*3010" || true
+        
+        # Iniciar aplicación en background
+        nohup npm start > backend.log 2>&1 &
+        
+        # Esperar y verificar que esté funcionando
+        sleep 10
+        curl -f http://localhost:3010/ || exit 1
+        
+        echo "Backend desplegado exitosamente en puerto 3010"
+        EOF
+
+    - name: ✅ Verificar despliegue
+      run: |
+        ssh -i ~/.ssh/ec2_key.pem ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
+        # Verificar que el proceso esté ejecutándose
+        ps aux | grep -E "node.*3010" | grep -v grep
+        
+        # Verificar que responda
+        curl -f http://localhost:3010/ && echo "✅ Backend funcionando correctamente"
+        
+        # Mostrar logs recientes
+        echo "📋 Logs recientes:"
+        tail -20 /home/ec2-user/lti-backend/backend.log || echo "No hay logs aún"
+        EOF
+
+  # Job 4: Notificación de resultado
+  notify:
+    name: 📢 Notificación
+    runs-on: ubuntu-latest
+    needs: [test-backend, build-backend, deploy-backend]
+    if: always()
+    
+    steps:
+    - name: ✅ Pipeline completado
+      run: |
+        if [ "${{ needs.deploy-backend.result }}" == "success" ]; then
+          echo "🎉 Pipeline completado exitosamente!"
+          echo "✅ Tests: ${{ needs.test-backend.result }}"
+          echo "✅ Build: ${{ needs.build-backend.result }}"
+          echo "✅ Deploy: ${{ needs.deploy-backend.result }}"
+        else
+          echo "❌ Pipeline falló en: ${{ needs.deploy-backend.result }}"
+          exit 1
+        fi

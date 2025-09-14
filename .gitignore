@@ -1,28 +1,63 @@
-# Ignore in all directories
-**/.DS_Store
-#**/.env
-**/.env.example
-**/node_modules
-**/prompts_master.md
-
-# other dependencies
-**/.pnp
-**.pnp.js
-
-# testing
-**/coverage
-
-# production
-**/build
-**/dist
-
-# logs
+# Dependencies
+node_modules/
+*/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# IDE
-.idea
-.vscode
+# Production builds
+dist/
+build/
+*/dist/
+*/build/
 
-# .env
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker
+.dockerignore
+
+# Temporary files
+*.tmp
+*.temp
+
+# AWS Keys (IMPORTANT: Never commit private keys)
+*.pem
+*.key
+deploy.sh
+
+# Build artifacts
+*.tar.gz
+backend-build.tar.gz
