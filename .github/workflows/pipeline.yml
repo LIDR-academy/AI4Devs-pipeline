@@ -107,6 +107,21 @@ jobs:
         else
           echo "⚠️ SSH Key might not be in correct format"
         fi
+        
+        # Save key to file for validation
+        echo "$EC2_SSH_KEY" > /tmp/ssh_key
+        chmod 600 /tmp/ssh_key
+        
+        # Try to validate with ssh-keygen
+        if ssh-keygen -l -f /tmp/ssh_key >/dev/null 2>&1; then
+          echo "✅ SSH key validation passed"
+          ssh-keygen -l -f /tmp/ssh_key
+        else
+          echo "❌ SSH key validation failed"
+        fi
+        
+        # Clean up
+        rm -f /tmp/ssh_key
       env:
         EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
 
