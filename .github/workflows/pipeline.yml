@@ -78,20 +78,32 @@ jobs:
         username: ${{ secrets.EC2_USERNAME }}
         key: ${{ secrets.EC2_SSH_KEY }}
         script: |
+          # Create application directory if it doesn't exist
+          mkdir -p /home/ec2-user/lti-backend
+          
           # Update environment variables
           echo "DATABASE_URL=postgresql://LTIdbUser:D1ymf8wyQEGthFR1E9xhCq@localhost:5432/LTIdb" > /home/ec2-user/lti-backend/.env
           echo "NODE_ENV=production" >> /home/ec2-user/lti-backend/.env
           echo "PORT=3010" >> /home/ec2-user/lti-backend/.env
           
+          # Debug: Show current directory and files
+          echo "Current directory: $(pwd)"
+          echo "Contents of /home/ec2-user/: $(ls -la /home/ec2-user/)"
+          
           # Login to ECR
+          echo "Logging into ECR..."
           aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
           
           # Stop existing container
+          echo "Stopping existing container..."
           docker stop lti-backend || true
           docker rm lti-backend || true
           
           # Pull and run new image
+          echo "Pulling new image: ${{ steps.build-image.outputs.image }}"
           docker pull ${{ steps.build-image.outputs.image }}
+          
+          echo "Starting new container..."
           docker run -d \
             --name lti-backend \
             --restart unless-stopped \
@@ -101,9 +113,19 @@ jobs:
             ${{ steps.build-image.outputs.image }}
           
           # Wait for container to start
+          echo "Waiting for container to start..."
           sleep 10
           
+          # Check container status
+          echo "Container status:"
+          docker ps -a
+          
+          # Check container logs
+          echo "Container logs:"
+          docker logs lti-backend
+          
           # Health check
+          echo "Starting health check..."
           for i in {1..30}; do
             if curl -f http://localhost:3010/; then
               echo "Health check passed"
