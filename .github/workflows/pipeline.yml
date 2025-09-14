@@ -71,6 +71,22 @@ jobs:
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
+    - name: Test SSH Connection
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        port: 22
+        timeout: 30s
+        script: |
+          echo "=== SSH Connection Test ==="
+          echo "Current user: $(whoami)"
+          echo "Current directory: $(pwd)"
+          echo "Docker version: $(docker --version)"
+          echo "AWS CLI version: $(aws --version)"
+          echo "=== Connection Test Successful ==="
+
     - name: Deploy to EC2
       uses: appleboy/ssh-action@v1.0.3
       with:
@@ -80,17 +96,15 @@ jobs:
         port: 22
         timeout: 60s
         script: |
-          # Test connection and basic commands
-          echo "=== Connection Test ==="
-          echo "Current user: $(whoami)"
-          echo "Current directory: $(pwd)"
-          echo "Docker version: $(docker --version)"
-          echo "AWS CLI version: $(aws --version)"
+          set -e  # Exit on any error
+          echo "=== Starting Deployment ==="
           
           # Create application directory if it doesn't exist
+          echo "Creating application directory..."
           mkdir -p /home/ec2-user/lti-backend
           
           # Update environment variables
+          echo "Setting up environment variables..."
           echo "DATABASE_URL=postgresql://LTIdbUser:D1ymf8wyQEGthFR1E9xhCq@localhost:5432/LTIdb" > /home/ec2-user/lti-backend/.env
           echo "NODE_ENV=production" >> /home/ec2-user/lti-backend/.env
           echo "PORT=3010" >> /home/ec2-user/lti-backend/.env
@@ -101,16 +115,22 @@ jobs:
           
           # Login to ECR
           echo "Logging into ECR..."
-          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }} || {
+            echo "ECR login failed!"
+            exit 1
+          }
           
           # Stop existing container
           echo "Stopping existing container..."
-          docker stop lti-backend || true
-          docker rm lti-backend || true
+          docker stop lti-backend || echo "No existing container to stop"
+          docker rm lti-backend || echo "No existing container to remove"
           
           # Pull and run new image
           echo "Pulling new image: ${{ steps.build-image.outputs.image }}"
-          docker pull ${{ steps.build-image.outputs.image }}
+          docker pull ${{ steps.build-image.outputs.image }} || {
+            echo "Failed to pull image!"
+            exit 1
+          }
           
           echo "Starting new container..."
           docker run -d \
@@ -119,7 +139,10 @@ jobs:
             -p 3010:3010 \
             --env-file /home/ec2-user/lti-backend/.env \
             --network host \
-            ${{ steps.build-image.outputs.image }}
+            ${{ steps.build-image.outputs.image }} || {
+            echo "Failed to start container!"
+            exit 1
+          }
           
           # Wait for container to start
           echo "Waiting for container to start..."
