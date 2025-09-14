@@ -71,106 +71,119 @@ jobs:
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-    - name: Test SSH Connection
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USERNAME }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        port: 22
-        timeout: 30s
-        debug: true
-        script: |
-          echo "=== SSH Connection Test ==="
-          echo "Current user: $(whoami)"
-          echo "Current directory: $(pwd)"
-          echo "Docker version: $(docker --version)"
-          echo "AWS CLI version: $(aws --version)"
-          echo "=== Connection Test Successful ==="
+    - name: Test EC2 Connection
+      run: |
+        echo "=== Testing EC2 Connection ==="
+        # Test basic connectivity
+        ping -c 2 ${{ secrets.EC2_HOST }} || echo "Ping test completed"
+        
+        # Test if instance is running
+        aws ec2 describe-instances --instance-ids i-04dd98425eda7ee4b --query 'Reservations[0].Instances[0].State.Name' --output text
+        
+        echo "=== Connection Test Complete ==="
 
-    - name: Deploy to EC2
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USERNAME }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        port: 22
-        timeout: 60s
-        debug: true
-        script: |
-          set -e  # Exit on any error
-          echo "=== Starting Deployment ==="
-          
-          # Create application directory if it doesn't exist
-          echo "Creating application directory..."
-          mkdir -p /home/ec2-user/lti-backend
-          
-          # Update environment variables
-          echo "Setting up environment variables..."
-          echo "DATABASE_URL=postgresql://LTIdbUser:D1ymf8wyQEGthFR1E9xhCq@localhost:5432/LTIdb" > /home/ec2-user/lti-backend/.env
-          echo "NODE_ENV=production" >> /home/ec2-user/lti-backend/.env
-          echo "PORT=3010" >> /home/ec2-user/lti-backend/.env
-          
-          # Debug: Show current directory and files
-          echo "Current directory: $(pwd)"
-          echo "Contents of /home/ec2-user/: $(ls -la /home/ec2-user/)"
-          
-          # Login to ECR
-          echo "Logging into ECR..."
-          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }} || {
-            echo "ECR login failed!"
-            exit 1
-          }
-          
-          # Stop existing container
-          echo "Stopping existing container..."
-          docker stop lti-backend || echo "No existing container to stop"
-          docker rm lti-backend || echo "No existing container to remove"
-          
-          # Pull and run new image
-          echo "Pulling new image: ${{ steps.build-image.outputs.image }}"
-          docker pull ${{ steps.build-image.outputs.image }} || {
-            echo "Failed to pull image!"
-            exit 1
-          }
-          
-          echo "Starting new container..."
-          docker run -d \
-            --name lti-backend \
-            --restart unless-stopped \
-            -p 3010:3010 \
-            --env-file /home/ec2-user/lti-backend/.env \
-            --network host \
-            ${{ steps.build-image.outputs.image }} || {
-            echo "Failed to start container!"
-            exit 1
-          }
-          
-          # Wait for container to start
-          echo "Waiting for container to start..."
-          sleep 10
-          
-          # Check container status
-          echo "Container status:"
-          docker ps -a
-          
-          # Check container logs
-          echo "Container logs:"
-          docker logs lti-backend
-          
-          # Health check
-          echo "Starting health check..."
-          for i in {1..30}; do
-            if curl -f http://localhost:3010/; then
-              echo "Health check passed"
-              break
-            fi
-            echo "Health check attempt $i failed, retrying..."
-            sleep 2
-          done
-          
-          # Clean up old images
-          docker image prune -f
+    - name: Deploy to EC2 using Instance Connect
+      run: |
+        set -e  # Exit on any error
+        echo "=== Starting EC2 Instance Connect Deployment ==="
+        
+        # Generate a temporary SSH key pair for this session
+        ssh-keygen -t rsa -b 2048 -f /tmp/ec2_key -N "" -q
+        
+        # Send the public key to EC2 Instance Connect
+        echo "Sending SSH public key to EC2 Instance Connect..."
+        aws ec2-instance-connect send-ssh-public-key \
+          --instance-id i-04dd98425eda7ee4b \
+          --availability-zone us-east-2a \
+          --instance-os-user ec2-user \
+          --ssh-public-key file:///tmp/ec2_key.pub
+        
+        # Wait a moment for the key to be registered
+        sleep 5
+        
+        # Create deployment script
+        cat > /tmp/deploy_script.sh << 'EOF'
+        set -e
+        echo "=== Starting Deployment on EC2 ==="
+        
+        # Create application directory if it doesn't exist
+        echo "Creating application directory..."
+        mkdir -p /home/ec2-user/lti-backend
+        
+        # Update environment variables
+        echo "Setting up environment variables..."
+        echo "DATABASE_URL=postgresql://LTIdbUser:D1ymf8wyQEGthFR1E9xhCq@localhost:5432/LTIdb" > /home/ec2-user/lti-backend/.env
+        echo "NODE_ENV=production" >> /home/ec2-user/lti-backend/.env
+        echo "PORT=3010" >> /home/ec2-user/lti-backend/.env
+        
+        # Debug: Show current directory and files
+        echo "Current directory: $(pwd)"
+        echo "Contents of /home/ec2-user/: $(ls -la /home/ec2-user/)"
+        
+        # Login to ECR
+        echo "Logging into ECR..."
+        aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin 851725501802.dkr.ecr.us-east-2.amazonaws.com
+        
+        # Stop existing container
+        echo "Stopping existing container..."
+        docker stop lti-backend || echo "No existing container to stop"
+        docker rm lti-backend || echo "No existing container to remove"
+        
+        # Pull and run new image
+        echo "Pulling new image: ${{ steps.build-image.outputs.image }}"
+        docker pull ${{ steps.build-image.outputs.image }}
+        
+        echo "Starting new container..."
+        docker run -d \
+          --name lti-backend \
+          --restart unless-stopped \
+          -p 3010:3010 \
+          --env-file /home/ec2-user/lti-backend/.env \
+          --network host \
+          ${{ steps.build-image.outputs.image }}
+        
+        # Wait for container to start
+        echo "Waiting for container to start..."
+        sleep 10
+        
+        # Check container status
+        echo "Container status:"
+        docker ps -a
+        
+        # Check container logs
+        echo "Container logs:"
+        docker logs lti-backend
+        
+        # Health check
+        echo "Starting health check..."
+        for i in {1..30}; do
+          if curl -f http://localhost:3010/; then
+            echo "Health check passed"
+            break
+          fi
+          echo "Health check attempt $i failed, retrying..."
+          sleep 2
+        done
+        
+        # Clean up old images
+        docker image prune -f
+        
+        echo "=== Deployment Complete ==="
+        EOF
+        
+        # Copy deployment script to EC2 and execute it
+        echo "Copying deployment script to EC2..."
+        scp -i /tmp/ec2_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+          /tmp/deploy_script.sh ec2-user@${{ secrets.EC2_HOST }}:/tmp/deploy_script.sh
+        
+        echo "Executing deployment script on EC2..."
+        ssh -i /tmp/ec2_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+          ec2-user@${{ secrets.EC2_HOST }} "chmod +x /tmp/deploy_script.sh && /tmp/deploy_script.sh"
+        
+        # Clean up temporary files
+        rm -f /tmp/ec2_key /tmp/ec2_key.pub /tmp/deploy_script.sh
+        
+        echo "=== EC2 Instance Connect Deployment Complete ==="
 
     - name: Notify deployment status
       if: always()
