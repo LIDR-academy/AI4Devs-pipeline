@@ -189,31 +189,22 @@ jobs:
             echo '✅ Dependencias instaladas'
           "
           
-      - name: 'Detener aplicación anterior'
+      - name: 'Desplegar y reiniciar aplicación'
         run: |
-          echo "🛑 Deteniendo aplicación anterior..."
+          echo "� Desplegando y reiniciando aplicación..."
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
-            if pgrep -f 'node.*index.js' > /dev/null; then
-              pkill -f 'node.*index.js'
-              echo '✅ Procesos Node.js detenidos'
-            else
-              echo 'ℹ️ No hay procesos anteriores'
-            fi
-          "
-          
-      - name: 'Esperar finalización'
-        run: |
-          echo "⏳ Esperando a que termine..."
-          sleep 5
-          
-      - name: 'Iniciar aplicación'
-        run: |
-          echo "🚀 Iniciando nueva aplicación..."
-          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
-            cd ${{ env.EC2_APP_PATH }} && 
-            nohup npm start > app.log 2>&1 & 
-            sleep 3 && 
-            echo 'Aplicación iniciada'
+            echo '🛑 Deteniendo aplicación anterior...'
+            pkill -f 'node.*index.js' || echo 'No hay procesos anteriores para detener'
+            
+            echo '⏳ Esperando 3 segundos...'
+            sleep 3
+            
+            echo '🚀 Iniciando nueva aplicación...'
+            cd ${{ env.EC2_APP_PATH }}
+            nohup npm start > app.log 2>&1 &
+            sleep 3
+            
+            echo '✅ Aplicación reiniciada'
           "
           
       - name: 'Verificar despliegue'
