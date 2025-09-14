@@ -71,13 +71,28 @@ jobs:
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-    - name: Skip Connection Test
+    - name: Check EC2 Instance Status
       run: |
-        echo "=== Skipping Connection Test ==="
+        echo "=== Checking EC2 Instance Status ==="
         echo "Target host: ${{ secrets.EC2_HOST }}"
         echo "Target username: ${{ secrets.EC2_USERNAME }}"
-        echo "Proceeding directly to SSH deployment..."
-        echo "=== Connection Test Skipped ==="
+        
+        # Check if instance is running
+        echo "Checking EC2 instance status..."
+        INSTANCE_STATE=$(aws ec2 describe-instances --instance-ids i-04dd98425eda7ee4b --query 'Reservations[0].Instances[0].State.Name' --output text 2>/dev/null || echo "unknown")
+        echo "Instance state: $INSTANCE_STATE"
+        
+        # Check public IP
+        PUBLIC_IP=$(aws ec2 describe-instances --instance-ids i-04dd98425eda7ee4b --query 'Reservations[0].Instances[0].PublicIpAddress' --output text 2>/dev/null || echo "none")
+        echo "Public IP: $PUBLIC_IP"
+        
+        # Check if public IP matches our target
+        if [ "$PUBLIC_IP" != "${{ secrets.EC2_HOST }}" ] && [ "$PUBLIC_IP" != "None" ] && [ "$PUBLIC_IP" != "none" ]; then
+          echo "⚠️ WARNING: Public IP ($PUBLIC_IP) doesn't match EC2_HOST secret (${{ secrets.EC2_HOST }})"
+          echo "You may need to update the EC2_HOST secret with the correct IP"
+        fi
+        
+        echo "=== EC2 Status Check Complete ==="
 
     - name: Validate SSH Key
       run: |
