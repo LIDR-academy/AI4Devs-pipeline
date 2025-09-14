@@ -127,13 +127,38 @@ jobs:
           
       - name: 'Verificar conexión SSH'
         run: |
-          ssh -o ConnectTimeout=10 ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo '✅ Conexión SSH exitosa'"
+          echo "🔍 Probando conexión SSH..."
+          ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo '✅ Conexión SSH exitosa'"
+          
+      - name: 'Verificar entorno del servidor'
+        run: |
+          echo "🔍 Verificando entorno del servidor..."
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
+            echo '📋 Información del sistema:'
+            whoami
+            pwd
+            node --version || echo 'Node.js no encontrado'
+            npm --version || echo 'npm no encontrado'
+            echo '📁 Verificando directorio de aplicación:'
+            ls -la /home/ec2-user/ || echo 'Error listando directorio home'
+          "
+          
+      - name: 'Crear directorio de aplicación'
+        run: |
+          echo "📁 Creando/verificando directorio de aplicación..."
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
+            mkdir -p ${{ env.EC2_APP_PATH }}
+            chown ${{ secrets.EC2_USER }}:${{ secrets.EC2_USER }} ${{ env.EC2_APP_PATH }}
+            ls -la ${{ env.EC2_APP_PATH }}
+            echo '✅ Directorio listo: ${{ env.EC2_APP_PATH }}'
+          "
           
       - name: 'Crear backup de la aplicación actual'
         run: |
+          echo "💾 Creando backup si existe aplicación anterior..."
           ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
-            if [ -d '${{ env.EC2_APP_PATH }}' ]; then
-              sudo cp -r ${{ env.EC2_APP_PATH }} ${{ env.EC2_APP_PATH }}_backup_\$(date +%Y%m%d_%H%M%S)
+            if [ -d '${{ env.EC2_APP_PATH }}' ] && [ \"\$(ls -A ${{ env.EC2_APP_PATH }})\" ]; then
+              cp -r ${{ env.EC2_APP_PATH }} ${{ env.EC2_APP_PATH }}_backup_\$(date +%Y%m%d_%H%M%S)
               echo '✅ Backup creado'
             else
               echo 'ℹ️ Primera instalación - no hay backup que crear'
@@ -142,13 +167,24 @@ jobs:
           
       - name: 'Copiar archivos al servidor'
         run: |
-          scp -r ./backend-build/* ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.EC2_APP_PATH }}/
+          echo "📦 Copiando archivos al servidor..."
+          echo "📋 Contenido a copiar:"
+          ls -la ./backend-build/
+          
+          scp -o StrictHostKeyChecking=no -r ./backend-build/* ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.EC2_APP_PATH }}/
           echo "✅ Archivos copiados al servidor"
+          
+          echo "🔍 Verificando archivos copiados:"
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "ls -la ${{ env.EC2_APP_PATH }}/"
           
       - name: 'Instalar dependencias en servidor'
         run: |
+          echo "📦 Instalando dependencias en el servidor..."
           ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
             cd ${{ env.EC2_APP_PATH }}
+            echo '📋 Contenido del directorio:'
+            ls -la
+            echo '📦 Instalando dependencias...'
             npm ci --only=production
             echo '✅ Dependencias instaladas'
           "
