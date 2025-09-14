@@ -77,7 +77,16 @@ jobs:
         host: ${{ secrets.EC2_HOST }}
         username: ${{ secrets.EC2_USERNAME }}
         key: ${{ secrets.EC2_SSH_KEY }}
+        port: 22
+        timeout: 60s
         script: |
+          # Test connection and basic commands
+          echo "=== Connection Test ==="
+          echo "Current user: $(whoami)"
+          echo "Current directory: $(pwd)"
+          echo "Docker version: $(docker --version)"
+          echo "AWS CLI version: $(aws --version)"
+          
           # Create application directory if it doesn't exist
           mkdir -p /home/ec2-user/lti-backend
           
