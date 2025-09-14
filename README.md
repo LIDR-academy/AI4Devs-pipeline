@@ -214,3 +214,4 @@ Para que el flujo de trabajo de GitHub Actions funcione correctamente, debes con
 3. **EC2_INSTANCE**: La dirección IP pública o el nombre DNS de tu instancia EC2.# Trigger pipeline run - dom 14 sep 2025 15:50:03 CST
 # Testing SSH key setup - dom 14 sep 2025 16:26:45 CST
 # Testing with correct EC2 IP - dom 14 sep 2025 16:32:42 CST
+# Testing with updated EC2 IP secret - dom 14 sep 2025 16:41:04 CST
