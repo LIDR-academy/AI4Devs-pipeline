@@ -56,7 +56,7 @@ app.use((req, res, next) => {
 const port = 3010;
 
 app.get('/', (req, res) => {
-  res.send('Hola LTI!');
+  res.send('Hola LTI! - Pipeline funcionando - Despliegue: 2025-09-14 19:15');
 });
 
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
