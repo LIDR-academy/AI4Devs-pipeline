@@ -1,0 +1,56 @@
+name: Node.js CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '16'
+      - name: Install dependencies and run tests
+        run: |
+          cd backend
+          npm install
+          npm test
+      - name: Build backend
+        run: |
+          cd backend
+          npm run build
+      - name: Upload backend build artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-build
+          path: backend/dist/
+  
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download backend build artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: backend-build
+          path: dist/
+      - name: Copy build to EC2 and restart with pm2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_INSTANCE }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            mkdir -p ~/backend/dist
+            rm -rf ~/backend/dist/*
+            scp -r dist/* ~/backend/dist/
+            cd ~/backend
+            npm install --omit=dev
+            pm2 reload all || pm2 start npm --name "my-app" -- start -- --port 8080
