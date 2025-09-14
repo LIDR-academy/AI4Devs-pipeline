@@ -8,7 +8,17 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
-# Permisos necesarios
+# Perm      - name: 'Detener aplicación anterior'
+        run: |
+          echo "🛑 Deteniendo aplicación anterior..."
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
+            if pgrep -f 'node.*index.js' > /dev/null; then
+              pkill -f 'node.*index.js'
+              echo 'Procesos Node.js detenidos'
+            else
+              echo 'No hay procesos Node.js anteriores'
+            fi
+          " necesarios
 permissions:
   contents: read
   pull-requests: read
@@ -189,64 +199,38 @@ jobs:
             echo '✅ Dependencias instaladas'
           "
           
-      - name: 'Reiniciar aplicación'
+      - name: 'Detener aplicación anterior'
         run: |
-          echo "🔄 Reiniciando aplicación..."
+          echo "� Deteniendo aplicación anterior..."
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "pkill -f 'node.*index.js' || echo 'No hay procesos anteriores'"
+          
+      - name: 'Esperar finalización'
+        run: |
+          echo "⏳ Esperando a que termine..."
+          sleep 5
+          
+      - name: 'Iniciar aplicación'
+        run: |
+          echo "🚀 Iniciando nueva aplicación..."
           ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
-            echo '🛑 Deteniendo aplicación anterior...'
-            pkill -f 'node.*index.js' || echo 'No hay procesos anteriores'
-            
-            echo '⏳ Esperando a que termine...'
-            sleep 5
-            
-            echo '🚀 Iniciando nueva aplicación...'
-            cd ${{ env.EC2_APP_PATH }}
-            
-            # Usar PM2 para manejar la aplicación
-            if command -v pm2 &> /dev/null; then
-              pm2 delete backend || echo 'No hay proceso PM2 anterior'
-              pm2 start dist/index.js --name backend
-              pm2 save
-              echo '✅ Aplicación iniciada con PM2'
-            else
-              # Fallback a nohup si PM2 no está disponible
-              nohup npm start > app.log 2>&1 &
-              sleep 3
-              echo '✅ Aplicación iniciada con nohup'
-            fi
+            cd ${{ env.EC2_APP_PATH }} && 
+            nohup npm start > app.log 2>&1 & 
+            sleep 3 && 
+            echo 'Aplicación iniciada'
           "
           
       - name: 'Verificar despliegue'
         run: |
           echo "🔍 Verificando que la aplicación esté funcionando..."
-          sleep 15
+          sleep 10
           
           ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
-            echo '📋 Estado de la aplicación:'
-            
-            # Verificar con PM2 primero
-            if command -v pm2 &> /dev/null; then
-              pm2 status || echo 'Error obteniendo estado PM2'
-              if pm2 status | grep -q 'backend.*online'; then
-                echo '✅ Aplicación corriendo con PM2'
-                exit 0
-              fi
-            fi
-            
-            # Verificar proceso Node.js directo
             if pgrep -f 'node.*index.js' > /dev/null; then
-              echo '✅ Aplicación está corriendo (PID: '\$(pgrep -f 'node.*index.js')')'
-              
-              # Probar respuesta HTTP local
-              if curl -f http://localhost:3010 > /dev/null 2>&1; then
-                echo '✅ Aplicación responde correctamente'
-              else
-                echo '⚠️  Aplicación corre pero no responde HTTP'
-              fi
+              echo '✅ Aplicación está corriendo (PID: '\$(pgrep -f 'node.*index.js')')' 
+              curl -f http://localhost:3010 && echo '✅ Aplicación responde correctamente' || echo '⚠️ Aplicación no responde HTTP'
             else
               echo '❌ Error: Aplicación no está corriendo'
-              echo '📄 Últimas líneas del log:'
-              tail -20 ${{ env.EC2_APP_PATH }}/app.log 2>/dev/null || echo 'No hay archivo de log'
+              cat ${{ env.EC2_APP_PATH }}/app.log 2>/dev/null || echo 'No hay archivo de log'
               exit 1
             fi
           "
