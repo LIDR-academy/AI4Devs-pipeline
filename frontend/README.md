@@ -45,6 +45,55 @@ You can learn more in the [Create React App documentation](https://facebook.gith
 
 To learn React, check out the [React documentation](https://reactjs.org/).
 
+## Solución de Problemas Comunes
+
+### Error: "react-scripts no se reconoce como comando"
+
+Si encuentras el error `"react-scripts" no se reconoce como un comando interno o externo`, sigue estos pasos:
+
+1. **Verificar la instalación de dependencias**:
+   ```bash
+   npm list react-scripts
+   ```
+
+2. **Si react-scripts no está instalado o está corrupto**:
+   ```bash
+   # Eliminar node_modules y package-lock.json
+   Remove-Item -Recurse -Force node_modules
+   Remove-Item -Force package-lock.json
+   
+   # Limpiar caché de npm
+   npm cache clean --force
+   
+   # Reinstalar dependencias
+   npm install
+   ```
+
+3. **Si los archivos del proyecto se eliminaron accidentalmente**:
+   ```bash
+   # Restaurar desde git
+   git checkout HEAD -- frontend/
+   cd frontend
+   npm install
+   ```
+
+4. **Verificar que el build funciona**:
+   ```bash
+   npm run build
+   ```
+
+### Advertencias de Dependencias Desactualizadas
+
+El proyecto puede mostrar advertencias sobre dependencias desactualizadas. Estas son normales y no afectan la funcionalidad:
+- `babel-preset-react-app` tiene dependencias desactualizadas
+- `browserslist` puede estar desactualizado
+- Algunas dependencias de `workbox` están deprecadas
+
+Para actualizar `browserslist`:
+```bash
+npx update-browserslist-db@latest
+```
+
 ## Configuración de EC2 y GitHub Actions
 
 Para ejecutar este proyecto en una instancia EC2 y asegurarte de que GitHub Actions funcione correctamente, sigue estos pasos:
