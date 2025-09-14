@@ -74,11 +74,20 @@ jobs:
     - name: Test EC2 Connection
       run: |
         echo "=== Testing EC2 Connection ==="
-        # Test basic connectivity
-        ping -c 2 ${{ secrets.EC2_HOST }} || echo "Ping test completed"
         
         # Test if instance is running
-        aws ec2 describe-instances --instance-ids i-04dd98425eda7ee4b --query 'Reservations[0].Instances[0].State.Name' --output text
+        echo "Checking EC2 instance status..."
+        INSTANCE_STATE=$(aws ec2 describe-instances --instance-ids i-04dd98425eda7ee4b --query 'Reservations[0].Instances[0].State.Name' --output text)
+        echo "Instance state: $INSTANCE_STATE"
+        
+        if [ "$INSTANCE_STATE" != "running" ]; then
+          echo "❌ Instance is not running. Current state: $INSTANCE_STATE"
+          exit 1
+        fi
+        
+        # Test SSH connectivity (without ping which is often blocked)
+        echo "Testing SSH connectivity..."
+        timeout 10 bash -c "</dev/tcp/${{ secrets.EC2_HOST }}/22" && echo "✅ SSH port 22 is accessible" || echo "⚠️ SSH port 22 test completed"
         
         echo "=== Connection Test Complete ==="
 
