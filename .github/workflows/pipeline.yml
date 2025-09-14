@@ -77,24 +77,11 @@ jobs:
         echo "Target host: ${{ secrets.EC2_HOST }}"
         echo "Target username: ${{ secrets.EC2_USERNAME }}"
         
-        # Install netcat for connectivity testing
-        echo "Installing netcat for connectivity tests..."
-        sudo apt-get update -qq
-        sudo apt-get install -y netcat-openbsd
-        
-        # Test if we can reach the instance at all
+        # Simple connectivity test using curl
         echo "Testing basic connectivity..."
-        timeout 5 nc -z ${{ secrets.EC2_HOST }} 80 && echo "✅ Port 80 accessible" || echo "⚠️ Port 80 not accessible"
-        timeout 5 nc -z ${{ secrets.EC2_HOST }} 443 && echo "✅ Port 443 accessible" || echo "⚠️ Port 443 not accessible"
-        timeout 5 nc -z ${{ secrets.EC2_HOST }} 3010 && echo "✅ Port 3010 accessible" || echo "⚠️ Port 3010 not accessible"
-        
-        # Test SSH connectivity with more verbose output
-        echo "Testing SSH connectivity to ${{ secrets.EC2_HOST }}..."
-        timeout 15 nc -z ${{ secrets.EC2_HOST }} 22 && echo "✅ SSH port 22 is accessible" || echo "⚠️ SSH port 22 not accessible"
-        
-        # Try to get more info about the connection
-        echo "Attempting telnet test to SSH port..."
-        timeout 10 telnet ${{ secrets.EC2_HOST }} 22 || echo "Telnet test completed"
+        timeout 5 curl -s --connect-timeout 3 http://${{ secrets.EC2_HOST }} > /dev/null && echo "✅ Port 80 accessible" || echo "⚠️ Port 80 not accessible"
+        timeout 5 curl -s --connect-timeout 3 https://${{ secrets.EC2_HOST }} > /dev/null && echo "✅ Port 443 accessible" || echo "⚠️ Port 443 not accessible"
+        timeout 5 curl -s --connect-timeout 3 http://${{ secrets.EC2_HOST }}:3010 > /dev/null && echo "✅ Port 3010 accessible" || echo "⚠️ Port 3010 not accessible"
         
         echo "=== Connection Test Complete ==="
 
