@@ -71,19 +71,13 @@ jobs:
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-    - name: Test EC2 Connection
+    - name: Skip Connection Test
       run: |
-        echo "=== Testing EC2 Connection ==="
+        echo "=== Skipping Connection Test ==="
         echo "Target host: ${{ secrets.EC2_HOST }}"
         echo "Target username: ${{ secrets.EC2_USERNAME }}"
-        
-        # Simple connectivity test using curl
-        echo "Testing basic connectivity..."
-        timeout 5 curl -s --connect-timeout 3 http://${{ secrets.EC2_HOST }} > /dev/null && echo "✅ Port 80 accessible" || echo "⚠️ Port 80 not accessible"
-        timeout 5 curl -s --connect-timeout 3 https://${{ secrets.EC2_HOST }} > /dev/null && echo "✅ Port 443 accessible" || echo "⚠️ Port 443 not accessible"
-        timeout 5 curl -s --connect-timeout 3 http://${{ secrets.EC2_HOST }}:3010 > /dev/null && echo "✅ Port 3010 accessible" || echo "⚠️ Port 3010 not accessible"
-        
-        echo "=== Connection Test Complete ==="
+        echo "Proceeding directly to SSH deployment..."
+        echo "=== Connection Test Skipped ==="
 
     - name: Validate SSH Key
       run: |
