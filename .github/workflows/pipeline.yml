@@ -67,4 +67,7 @@ jobs:
           script: |
             cd ~/backend
             npm install --omit=dev
+            if ! command -v pm2 &> /dev/null; then
+              npm install -g pm2
+            fi
             pm2 reload all || pm2 start npm --name "my-app" -- start -- --port 8080
