@@ -1,0 +1,149 @@
+name: Backend CI/CD Pipeline
+
+on:
+  push:
+    branches: ['*']
+  pull_request:
+    branches: ['main', 'develop']
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_USER: testuser
+          POSTGRES_DB: testdb
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: backend/package-lock.json
+
+    - name: Install dependencies
+      working-directory: ./backend
+      run: npm ci
+
+    - name: Generate Prisma client
+      working-directory: ./backend
+      run: npx prisma generate
+
+    - name: Run database migrations
+      working-directory: ./backend
+      env:
+        DATABASE_URL: postgresql://testuser:testpassword@localhost:5432/testdb
+      run: npx prisma migrate deploy
+
+    - name: Run tests
+      working-directory: ./backend
+      env:
+        DATABASE_URL: postgresql://testuser:testpassword@localhost:5432/testdb
+      run: npm test
+
+    - name: Build application
+      working-directory: ./backend
+      run: npm run build
+
+  build-and-deploy:
+    name: Build and Deploy to EC2
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build, tag, and push image to Amazon ECR
+      id: build-image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: lti-backend
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        cd backend
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+    - name: Deploy to EC2
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          # Update environment variables
+          echo "DATABASE_URL=postgresql://LTIdbUser:D1ymf8wyQEGthFR1E9xhCq@localhost:5432/LTIdb" > /home/ec2-user/lti-backend/.env
+          echo "NODE_ENV=production" >> /home/ec2-user/lti-backend/.env
+          echo "PORT=3010" >> /home/ec2-user/lti-backend/.env
+          
+          # Login to ECR
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+          
+          # Stop existing container
+          docker stop lti-backend || true
+          docker rm lti-backend || true
+          
+          # Pull and run new image
+          docker pull ${{ steps.build-image.outputs.image }}
+          docker run -d \
+            --name lti-backend \
+            --restart unless-stopped \
+            -p 3010:3010 \
+            --env-file /home/ec2-user/lti-backend/.env \
+            --network host \
+            ${{ steps.build-image.outputs.image }}
+          
+          # Wait for container to start
+          sleep 10
+          
+          # Health check
+          for i in {1..30}; do
+            if curl -f http://localhost:3010/; then
+              echo "Health check passed"
+              break
+            fi
+            echo "Health check attempt $i failed, retrying..."
+            sleep 2
+          done
+          
+          # Clean up old images
+          docker image prune -f
+
+    - name: Notify deployment status
+      if: always()
+      run: |
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "✅ Deployment successful!"
+        else
+          echo "❌ Deployment failed!"
+        fi
