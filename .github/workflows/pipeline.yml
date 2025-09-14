@@ -79,6 +79,11 @@ jobs:
         echo "Testing SSH connectivity to ${{ secrets.EC2_HOST }}..."
         timeout 10 bash -c "</dev/tcp/${{ secrets.EC2_HOST }}/22" && echo "✅ SSH port 22 is accessible" || echo "⚠️ SSH port 22 test completed"
         
+        # Test if we can reach the instance at all
+        echo "Testing basic connectivity..."
+        timeout 5 bash -c "</dev/tcp/${{ secrets.EC2_HOST }}/80" && echo "✅ Port 80 accessible" || echo "⚠️ Port 80 not accessible"
+        timeout 5 bash -c "</dev/tcp/${{ secrets.EC2_HOST }}/443" && echo "✅ Port 443 accessible" || echo "⚠️ Port 443 not accessible"
+        
         echo "=== Connection Test Complete ==="
 
     - name: Deploy to EC2 using Direct SSH
