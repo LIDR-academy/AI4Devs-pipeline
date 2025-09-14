@@ -111,6 +111,9 @@ jobs:
         EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
 
     - name: Deploy to EC2 using Direct SSH
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_NAME: ${{ steps.build-image.outputs.image }}
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.EC2_HOST }}
@@ -119,6 +122,7 @@ jobs:
         port: 22
         timeout: 60s
         debug: true
+        envs: ECR_REGISTRY,IMAGE_NAME
         script: |
           set -e  # Exit on any error
           echo "=== Starting Direct SSH Deployment ==="
@@ -139,7 +143,7 @@ jobs:
           
           # Login to ECR
           echo "Logging into ECR..."
-          aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin 851725501802.dkr.ecr.us-east-2.amazonaws.com || {
+          aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin $ECR_REGISTRY || {
             echo "ECR login failed!"
             exit 1
           }
@@ -150,8 +154,8 @@ jobs:
           docker rm lti-backend || echo "No existing container to remove"
           
           # Pull and run new image
-          echo "Pulling new image: ${{ steps.build-image.outputs.image }}"
-          docker pull ${{ steps.build-image.outputs.image }} || {
+          echo "Pulling new image: $IMAGE_NAME"
+          docker pull $IMAGE_NAME || {
             echo "Failed to pull image!"
             exit 1
           }
@@ -163,7 +167,7 @@ jobs:
             -p 3010:3010 \
             --env-file /home/ec2-user/lti-backend/.env \
             --network host \
-            ${{ steps.build-image.outputs.image }} || {
+            $IMAGE_NAME || {
             echo "Failed to start container!"
             exit 1
           }
