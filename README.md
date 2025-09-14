@@ -212,3 +212,4 @@ Para que el flujo de trabajo de GitHub Actions funcione correctamente, debes con
 1. **AWS_ACCESS_ID**: Tu ID de clave de acceso de AWS.
 2. **AWS_ACCESS_KEY**: Tu clave de acceso secreta de AWS.
 3. **EC2_INSTANCE**: La dirección IP pública o el nombre DNS de tu instancia EC2.# Trigger pipeline run - dom 14 sep 2025 15:50:03 CST
+# Testing SSH key setup - dom 14 sep 2025 16:26:45 CST
