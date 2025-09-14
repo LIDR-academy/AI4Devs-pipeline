@@ -79,6 +79,7 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         port: 22
         timeout: 30s
+        debug: true
         script: |
           echo "=== SSH Connection Test ==="
           echo "Current user: $(whoami)"
@@ -95,6 +96,7 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         port: 22
         timeout: 60s
+        debug: true
         script: |
           set -e  # Exit on any error
           echo "=== Starting Deployment ==="
