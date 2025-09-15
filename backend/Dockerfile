@@ -48,7 +48,7 @@ EXPOSE 3010
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3010/', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
+  CMD node -e "require('http').get('http://0.0.0.0:3010/', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
 
 # Start the application with PM2
 CMD ["pm2-runtime", "start", "ecosystem.config.js"]

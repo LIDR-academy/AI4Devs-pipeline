@@ -146,6 +146,19 @@ jobs:
           echo "Creating application directory..."
           mkdir -p /home/ec2-user/lti-backend
           
+          # Setup PostgreSQL database
+          echo "Setting up PostgreSQL database..."
+          sudo yum update -y
+          sudo yum install -y postgresql15 postgresql15-server
+          sudo /usr/pgsql-15/bin/postgresql-15-setup initdb
+          sudo systemctl enable postgresql-15
+          sudo systemctl start postgresql-15
+          
+          # Create database and user
+          sudo -u postgres psql -c "CREATE USER LTIdbUser WITH PASSWORD 'D1ymf8wyQEGthFR1E9xhCq';" || echo "User might already exist"
+          sudo -u postgres psql -c "CREATE DATABASE LTIdb OWNER LTIdbUser;" || echo "Database might already exist"
+          sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE LTIdb TO LTIdbUser;"
+          
           # Update environment variables
           echo "Setting up environment variables..."
           echo "DATABASE_URL=postgresql://LTIdbUser:D1ymf8wyQEGthFR1E9xhCq@localhost:5432/LTIdb" > /home/ec2-user/lti-backend/.env
@@ -199,10 +212,16 @@ jobs:
           echo "Container logs:"
           docker logs lti-backend
           
+          # Run Prisma migrations
+          echo "Running Prisma migrations..."
+          docker exec lti-backend npx prisma migrate deploy || {
+            echo "Prisma migrations failed, but continuing..."
+          }
+          
           # Health check
           echo "Starting health check..."
           for i in {1..30}; do
-            if curl -f http://localhost:3010/; then
+            if curl -f http://0.0.0.0:3010/; then
               echo "Health check passed"
               break
             fi
