@@ -153,7 +153,27 @@ jobs:
           
           # Initialize PostgreSQL database
           echo "Initializing PostgreSQL database..."
-          sudo -u postgres /usr/pgsql-15/bin/initdb -D /var/lib/pgsql/15/data
+          # Find the correct initdb path
+          INITDB_PATH=$(find /usr -name "initdb" 2>/dev/null | head -1)
+          if [ -z "$INITDB_PATH" ]; then
+            echo "initdb not found, trying alternative paths..."
+            # Try common paths for Amazon Linux 2023
+            for path in "/usr/bin/initdb" "/usr/pgsql-15/bin/initdb" "/usr/lib/postgresql/15/bin/initdb"; do
+              if [ -f "$path" ]; then
+                INITDB_PATH="$path"
+                break
+              fi
+            done
+          fi
+          
+          if [ -n "$INITDB_PATH" ]; then
+            echo "Using initdb at: $INITDB_PATH"
+            sudo -u postgres $INITDB_PATH -D /var/lib/pgsql/15/data
+          else
+            echo "initdb not found, trying to initialize with systemctl"
+            sudo systemctl start postgresql-15
+            sleep 5
+          fi
           
           # Start PostgreSQL service
           sudo systemctl enable postgresql-15
