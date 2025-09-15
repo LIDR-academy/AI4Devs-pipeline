@@ -149,14 +149,11 @@ jobs:
           # Setup PostgreSQL database
           echo "Setting up PostgreSQL database..."
           sudo yum update -y
-          sudo yum install -y postgresql15 postgresql15-server postgresql-setup
+          sudo yum install -y postgresql15 postgresql15-server
           
           # Initialize PostgreSQL database
           echo "Initializing PostgreSQL database..."
-          sudo /usr/pgsql-15/bin/postgresql-15-setup initdb || {
-            echo "Trying alternative initialization method..."
-            sudo -u postgres /usr/pgsql-15/bin/initdb -D /var/lib/pgsql/15/data
-          }
+          sudo -u postgres /usr/pgsql-15/bin/initdb -D /var/lib/pgsql/15/data
           
           # Start PostgreSQL service
           sudo systemctl enable postgresql-15
