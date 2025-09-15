@@ -178,6 +178,25 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: backend/package-lock.json
+
+    - name: Install dependencies
+      working-directory: ./backend
+      run: npm ci
+
+    - name: Generate Prisma client
+      working-directory: ./backend
+      run: npx prisma generate
+
+    - name: Build application
+      working-directory: ./backend
+      run: npm run build
+
     - name: Run Lighthouse CI
       uses: treosh/lighthouse-ci-action@v10
       with:
@@ -222,7 +241,7 @@ jobs:
     
     steps:
     - name: Notify Slack on Success
-      if: needs.deploy-production.result == 'success' || needs.deploy-staging.result == 'success'
+      if: (needs.deploy-production.result == 'success' || needs.deploy-staging.result == 'success') && secrets.SLACK_WEBHOOK_URL != ''
       uses: 8398a7/action-slack@v3
       with:
         status: success
@@ -231,10 +250,19 @@ jobs:
         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
     - name: Notify Slack on Failure
-      if: needs.deploy-production.result == 'failure' || needs.deploy-staging.result == 'failure'
+      if: (needs.deploy-production.result == 'failure' || needs.deploy-staging.result == 'failure') && secrets.SLACK_WEBHOOK_URL != ''
       uses: 8398a7/action-slack@v3
       with:
         status: failure
         text: '❌ Deployment failed!'
       env:
         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+    - name: Log notification status
+      if: always()
+      run: |
+        if [ -z "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+          echo "ℹ️ Slack notifications disabled - SLACK_WEBHOOK_URL secret not configured"
+        else
+          echo "✅ Slack notifications enabled"
+        fi
