@@ -1,0 +1,78 @@
+# Nombre descriptivo del workflow
+name: Backend CI/CD Pipeline
+
+# Disparador: Se activa en cada push a una rama que tenga un Pull Request abierto contra la rama 'main'
+on:
+  pull_request:
+    branches:
+      - pipeline-JF
+    types: [opened, synchronize]
+
+jobs:
+  # Nombre del trabajo
+  test-build-and-deploy:
+    # El trabajo se ejecuta en un Runner de GitHub con la última versión de Ubuntu
+    runs-on: ubuntu-latest
+
+    steps:
+      # Paso 1: Clonar el código del repositorio en el Runner
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Paso 2: Configurar el entorno de Node.js en el Runner
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # Usa la misma versión que configuraste en tu EC2
+
+      # Paso 3: Instalar dependencias del backend
+      # Se ejecuta desde la carpeta del backend
+      - name: Install backend dependencies
+        run: npm install
+        working-directory: ./backend
+
+      # Paso 4: (REQUISITO 1) Ejecutar los tests de backend con Jest
+      # Si este paso falla, el workflow se detiene y no continúa.
+      - name: Run backend tests
+        run: npm test
+        working-directory: ./backend
+
+      # Paso 5: (REQUISITO 2) Generar el build del backend
+      # Este paso solo se ejecuta si los tests fueron exitosos.
+      - name: Build backend
+        run: npm run build
+        working-directory: ./backend
+
+      # Paso 6: (REQUISITO 3) Desplegar en EC2
+      # Este paso solo se ejecuta si los tests y el build fueron exitosos.
+      - name: Deploy to EC2
+        # Usamos una acción de la comunidad para simplificar la conexión SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          # Estas variables vienen de los "Secrets" de tu repositorio en GitHub
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu # El usuario que creamos en la instancia EC2
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          # Script que se ejecutará en el servidor EC2
+          script: |
+            # Navega al directorio de tu proyecto en el servidor EC2
+            # ASEGÚRATE de reemplazar 'nombre-del-repositorio' con el nombre real
+            cd ~/AI4Devs-pipeline 
+            
+            # Trae los últimos cambios del repositorio
+            git pull
+            
+            # Entra a la carpeta del backend
+            cd backend
+            
+            # Instala dependencias (omitiendo las de desarrollo para un entorno más limpio)
+            npm install --omit=dev
+            
+            # Aplica cualquier nueva migración a la base de datos
+            npx prisma migrate deploy
+            
+            # Genera el build de producción en el servidor
+            npm run build
+            
+            # Reinicia la aplicación usando PM2 para aplicar los cambios sin downtime
+            pm2 restart lti-backend
