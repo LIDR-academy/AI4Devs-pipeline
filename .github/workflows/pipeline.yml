@@ -190,27 +190,27 @@ jobs:
           
           # Start PostgreSQL service
           echo "Starting PostgreSQL service..."
-          # Try different service names for Amazon Linux 2023
-          if systemctl list-unit-files | grep -q "postgresql-15.service"; then
-            sudo systemctl enable postgresql-15
-            sudo systemctl start postgresql-15
-          elif systemctl list-unit-files | grep -q "postgresql.service"; then
-            sudo systemctl enable postgresql
-            sudo systemctl start postgresql
-          else
-            echo "No systemd service found, starting PostgreSQL manually..."
-            sudo -u postgres /usr/bin/pg_ctl -D /var/lib/pgsql/15/data -l /var/lib/pgsql/15/data/logfile start
-          fi
+          
+          # Create log directory for PostgreSQL
+          sudo mkdir -p /var/lib/pgsql/15/data
+          sudo chown -R postgres:postgres /var/lib/pgsql/15/data
+          
+          # Start PostgreSQL manually using pg_ctl (recommended by initdb)
+          echo "Starting PostgreSQL using pg_ctl..."
+          sudo -u postgres /usr/bin/pg_ctl -D /var/lib/pgsql/15/data -l /var/lib/pgsql/15/data/logfile start
           
           # Wait for PostgreSQL to start
-          sleep 5
+          sleep 10
           
           # Verify PostgreSQL is running
           if pgrep -f postgres > /dev/null; then
-            echo "PostgreSQL is running"
+            echo "PostgreSQL is running successfully"
           else
-            echo "PostgreSQL failed to start, trying manual start..."
+            echo "PostgreSQL failed to start, checking logs..."
+            sudo -u postgres cat /var/lib/pgsql/15/data/logfile || echo "No logfile found"
+            echo "Trying to start PostgreSQL again..."
             sudo -u postgres /usr/bin/pg_ctl -D /var/lib/pgsql/15/data -l /var/lib/pgsql/15/data/logfile start
+            sleep 5
           fi
           
           # Create database and user
