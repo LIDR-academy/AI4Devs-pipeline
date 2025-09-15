@@ -55,6 +55,9 @@ jobs:
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           # Script que se ejecutará en el servidor EC2
           script: |
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
             # Navega al directorio de tu proyecto en el servidor EC2
             # ASEGÚRATE de reemplazar 'nombre-del-repositorio' con el nombre real
             cd ~/AI4Devs-pipeline 
