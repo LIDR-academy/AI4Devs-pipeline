@@ -153,6 +153,17 @@ jobs:
           
           # Initialize PostgreSQL database
           echo "Initializing PostgreSQL database..."
+          
+          # Clean up any existing PostgreSQL data directory
+          echo "Cleaning up existing PostgreSQL data directory..."
+          sudo rm -rf /var/lib/pgsql/15/data
+          
+          # Create and set proper permissions for PostgreSQL directories
+          echo "Setting up PostgreSQL directories and permissions..."
+          sudo mkdir -p /var/lib/pgsql/15
+          sudo chown -R postgres:postgres /var/lib/pgsql/15
+          sudo chmod 700 /var/lib/pgsql/15
+          
           # Find the correct initdb path
           INITDB_PATH=$(find /usr -name "initdb" 2>/dev/null | head -1)
           if [ -z "$INITDB_PATH" ]; then
@@ -168,6 +179,8 @@ jobs:
           
           if [ -n "$INITDB_PATH" ]; then
             echo "Using initdb at: $INITDB_PATH"
+            # Initialize with proper working directory to avoid permission issues
+            cd /tmp
             sudo -u postgres $INITDB_PATH -D /var/lib/pgsql/15/data
           else
             echo "initdb not found, trying to initialize with systemctl"
