@@ -1,16 +1,22 @@
-name: Backend CI/CD Pipeline
+name: Enhanced Backend CI/CD Pipeline
 
 on:
   push:
-    branches: ['*']
+    branches: [ main, pipeline-mg, staging ]
   pull_request:
-    branches: ['main', 'develop']
+    branches: [ main, pipeline-mg, staging ]
+
+env:
+  AWS_REGION: us-east-2
+  ECR_REPOSITORY: lti-backend
+  IMAGE_TAG: ${{ github.sha }}
 
 jobs:
+  # Priority 1: Parallel execution and conditional deployments
   test:
     name: Run Tests
     runs-on: ubuntu-latest
-
+    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -38,11 +44,15 @@ jobs:
       working-directory: ./backend
       run: npm run build
 
-  build-and-deploy:
-    name: Build and Deploy to EC2
-    needs: test
+  # Priority 2: Docker layer caching and build optimization
+  build:
+    name: Build Docker Image
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+    needs: test
+    outputs:
+      image: ${{ steps.build-image.outputs.image }}
+      registry: ${{ steps.login-ecr.outputs.registry }}
+    if: github.event_name == 'push'
     
     steps:
     - name: Checkout code
@@ -53,251 +63,178 @@ jobs:
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_REGION }}
+        aws-region: ${{ env.AWS_REGION }}
 
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
 
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
     - name: Build, tag, and push image to Amazon ECR
       id: build-image
-      env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        ECR_REPOSITORY: lti-backend
-        IMAGE_TAG: ${{ github.sha }}
-      run: |
-        cd backend
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
-
-    - name: Check EC2 Instance Status
-      run: |
-        echo "=== Checking EC2 Instance Status ==="
-        echo "Target host: ${{ secrets.EC2_HOST }}"
-        echo "Target username: ${{ secrets.EC2_USERNAME }}"
-        
-        # Check if instance is running
-        echo "Checking EC2 instance status..."
-        INSTANCE_STATE=$(aws ec2 describe-instances --instance-ids i-04dd98425eda7ee4b --query 'Reservations[0].Instances[0].State.Name' --output text 2>/dev/null || echo "unknown")
-        echo "Instance state: $INSTANCE_STATE"
-        
-        # Check public IP
-        PUBLIC_IP=$(aws ec2 describe-instances --instance-ids i-04dd98425eda7ee4b --query 'Reservations[0].Instances[0].PublicIpAddress' --output text 2>/dev/null || echo "none")
-        echo "Public IP: $PUBLIC_IP"
-        
-        # Check if public IP matches our target
-        if [ "$PUBLIC_IP" != "${{ secrets.EC2_HOST }}" ] && [ "$PUBLIC_IP" != "None" ] && [ "$PUBLIC_IP" != "none" ]; then
-          echo "⚠️ WARNING: Public IP ($PUBLIC_IP) doesn't match EC2_HOST secret (${{ secrets.EC2_HOST }})"
-          echo "You may need to update the EC2_HOST secret with the correct IP"
-        fi
-        
-        echo "=== EC2 Status Check Complete ==="
-
-    - name: Validate SSH Key
-      run: |
-        echo "=== Validating SSH Key ==="
-        echo "SSH Key length: ${#EC2_SSH_KEY}"
-        echo "SSH Key starts with: ${EC2_SSH_KEY:0:50}..."
-        echo "SSH Key ends with: ...${EC2_SSH_KEY: -50}"
-        
-        # Check if key looks like a valid private key
-        if [[ "$EC2_SSH_KEY" == *"BEGIN"*"PRIVATE KEY"* ]]; then
-          echo "✅ SSH Key appears to be a valid private key"
-        else
-          echo "⚠️ SSH Key might not be in correct format"
-        fi
-        
-        # Save key to file for validation
-        echo "$EC2_SSH_KEY" > /tmp/ssh_key
-        chmod 600 /tmp/ssh_key
-        
-        # Try to validate with ssh-keygen
-        if ssh-keygen -l -f /tmp/ssh_key >/dev/null 2>&1; then
-          echo "✅ SSH key validation passed"
-          ssh-keygen -l -f /tmp/ssh_key
-        else
-          echo "❌ SSH key validation failed"
-        fi
-        
-        # Clean up
-        rm -f /tmp/ssh_key
-      env:
-        EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-
-    - name: Deploy to EC2 using Direct SSH
-      env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        IMAGE_NAME: ${{ steps.build-image.outputs.image }}
-      uses: appleboy/ssh-action@v1.0.3
+      uses: docker/build-push-action@v5
       with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USERNAME }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        port: 22
-        timeout: 60s
-        debug: true
-        envs: ECR_REGISTRY,IMAGE_NAME
-        script: |
-          set -e  # Exit on any error
-          echo "=== Starting Direct SSH Deployment ==="
-          
-          # Create application directory if it doesn't exist
-          echo "Creating application directory..."
-          mkdir -p /home/ec2-user/lti-backend
-          
-          # Setup PostgreSQL database
-          echo "Setting up PostgreSQL database..."
-          sudo yum update -y
-          sudo yum install -y postgresql15 postgresql15-server
-          
-          # Initialize PostgreSQL database
-          echo "Initializing PostgreSQL database..."
-          
-          # Clean up any existing PostgreSQL data directory
-          echo "Cleaning up existing PostgreSQL data directory..."
-          sudo rm -rf /var/lib/pgsql/15/data
-          
-          # Create and set proper permissions for PostgreSQL directories
-          echo "Setting up PostgreSQL directories and permissions..."
-          sudo mkdir -p /var/lib/pgsql/15
-          sudo chown -R postgres:postgres /var/lib/pgsql/15
-          sudo chmod 700 /var/lib/pgsql/15
-          
-          # Find the correct initdb path
-          INITDB_PATH=$(find /usr -name "initdb" 2>/dev/null | head -1)
-          if [ -z "$INITDB_PATH" ]; then
-            echo "initdb not found, trying alternative paths..."
-            # Try common paths for Amazon Linux 2023
-            for path in "/usr/bin/initdb" "/usr/pgsql-15/bin/initdb" "/usr/lib/postgresql/15/bin/initdb"; do
-              if [ -f "$path" ]; then
-                INITDB_PATH="$path"
-                break
-              fi
-            done
-          fi
-          
-          if [ -n "$INITDB_PATH" ]; then
-            echo "Using initdb at: $INITDB_PATH"
-            # Initialize with proper working directory to avoid permission issues
-            cd /tmp
-            sudo -u postgres $INITDB_PATH -D /var/lib/pgsql/15/data
-          else
-            echo "initdb not found, trying to initialize with systemctl"
-            sudo systemctl start postgresql-15
-            sleep 5
-          fi
-          
-          # Start PostgreSQL service
-          echo "Starting PostgreSQL service..."
-          
-          # Create log directory for PostgreSQL
-          sudo mkdir -p /var/lib/pgsql/15/data
-          sudo chown -R postgres:postgres /var/lib/pgsql/15/data
-          
-          # Start PostgreSQL manually using pg_ctl (recommended by initdb)
-          echo "Starting PostgreSQL using pg_ctl..."
-          sudo -u postgres /usr/bin/pg_ctl -D /var/lib/pgsql/15/data -l /var/lib/pgsql/15/data/logfile start
-          
-          # Wait for PostgreSQL to start
-          sleep 10
-          
-          # Verify PostgreSQL is running
-          if pgrep -f postgres > /dev/null; then
-            echo "PostgreSQL is running successfully"
-          else
-            echo "PostgreSQL failed to start, checking logs..."
-            sudo -u postgres cat /var/lib/pgsql/15/data/logfile || echo "No logfile found"
-            echo "Trying to start PostgreSQL again..."
-            sudo -u postgres /usr/bin/pg_ctl -D /var/lib/pgsql/15/data -l /var/lib/pgsql/15/data/logfile start
-            sleep 5
-          fi
-          
-          # Create database and user
-          sudo -u postgres psql -c "CREATE USER LTIdbUser WITH PASSWORD 'D1ymf8wyQEGthFR1E9xhCq';" || echo "User might already exist"
-          sudo -u postgres psql -c "CREATE DATABASE LTIdb OWNER LTIdbUser;" || echo "Database might already exist"
-          sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE LTIdb TO LTIdbUser;"
-          
-          # Update environment variables
-          echo "Setting up environment variables..."
-          echo "DATABASE_URL=postgresql://LTIdbUser:D1ymf8wyQEGthFR1E9xhCq@localhost:5432/LTIdb" > /home/ec2-user/lti-backend/.env
-          echo "NODE_ENV=production" >> /home/ec2-user/lti-backend/.env
-          echo "PORT=3010" >> /home/ec2-user/lti-backend/.env
-          
-          # Debug: Show current directory and files
-          echo "Current directory: $(pwd)"
-          echo "Contents of /home/ec2-user/: $(ls -la /home/ec2-user/)"
-          
-          # Login to ECR
-          echo "Logging into ECR..."
-          aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin $ECR_REGISTRY || {
-            echo "ECR login failed!"
-            exit 1
-          }
-          
-          # Stop existing container
-          echo "Stopping existing container..."
-          docker stop lti-backend || echo "No existing container to stop"
-          docker rm lti-backend || echo "No existing container to remove"
-          
-          # Pull and run new image
-          echo "Pulling new image: $IMAGE_NAME"
-          docker pull $IMAGE_NAME || {
-            echo "Failed to pull image!"
-            exit 1
-          }
-          
-          echo "Starting new container..."
-          docker run -d \
-            --name lti-backend \
-            --restart unless-stopped \
-            -p 3010:3010 \
-            --env-file /home/ec2-user/lti-backend/.env \
-            --network host \
-            $IMAGE_NAME || {
-            echo "Failed to start container!"
-            exit 1
-          }
-          
-          # Wait for container to start
-          echo "Waiting for container to start..."
-          sleep 10
-          
-          # Check container status
-          echo "Container status:"
-          docker ps -a
-          
-          # Check container logs
-          echo "Container logs:"
-          docker logs lti-backend
-          
-          # Run Prisma migrations
-          echo "Running Prisma migrations..."
-          docker exec lti-backend npx prisma migrate deploy || {
-            echo "Prisma migrations failed, but continuing..."
-          }
-          
-          # Health check
-          echo "Starting health check..."
-          for i in {1..30}; do
-            if curl -f http://0.0.0.0:3010/; then
-              echo "Health check passed"
-              break
-            fi
-            echo "Health check attempt $i failed, retrying..."
-            sleep 2
-          done
-          
-          # Clean up old images
-          docker image prune -f
-          
-          echo "=== Direct SSH Deployment Complete ==="
+        context: ./backend
+        push: true
+        tags: |
+          ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64
 
-    - name: Notify deployment status
+  # Priority 1: Conditional deployment based on branch
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    environment: staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Deploy to EC2
+      uses: ./.github/actions/deploy
+      with:
+        ec2-host: ${{ secrets.EC2_HOST_STAGING }}
+        ec2-username: ${{ secrets.EC2_USERNAME }}
+        ec2-ssh-key: ${{ secrets.EC2_SSH_KEY }}
+        ecr-registry: ${{ needs.build.outputs.registry }}
+        image-name: ${{ needs.build.outputs.image }}
+        environment: staging
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Deploy to EC2
+      uses: ./.github/actions/deploy
+      with:
+        ec2-host: ${{ secrets.EC2_HOST }}
+        ec2-username: ${{ secrets.EC2_USERNAME }}
+        ec2-ssh-key: ${{ secrets.EC2_SSH_KEY }}
+        ecr-registry: ${{ needs.build.outputs.registry }}
+        image-name: ${{ needs.build.outputs.image }}
+        environment: production
+
+  # Priority 3: Security scanning and monitoring
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
       if: always()
-      run: |
-        if [ "${{ job.status }}" == "success" ]; then
-          echo "✅ Deployment successful!"
-        else
-          echo "❌ Deployment failed!"
-        fi
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  # Priority 3: Performance monitoring
+  performance-test:
+    name: Performance Test
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Lighthouse CI
+      uses: treosh/lighthouse-ci-action@v10
+      with:
+        configPath: './lighthouse.config.js'
+        uploadArtifacts: true
+        temporaryPublicStorage: true
+
+  # Priority 2: Rollback mechanism
+  rollback:
+    name: Rollback on Failure
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Rollback to previous version
+      uses: ./.github/actions/rollback
+      with:
+        ec2-host: ${{ secrets.EC2_HOST }}
+        ec2-username: ${{ secrets.EC2_USERNAME }}
+        ec2-ssh-key: ${{ secrets.EC2_SSH_KEY }}
+        ecr-registry: ${{ needs.build.outputs.registry }}
+        environment: production
+
+  # Priority 3: Notification and monitoring
+  notify:
+    name: Send Notifications
+    runs-on: ubuntu-latest
+    needs: [deploy-production, deploy-staging]
+    if: always()
+    
+    steps:
+    - name: Notify Slack on Success
+      if: needs.deploy-production.result == 'success' || needs.deploy-staging.result == 'success'
+      uses: 8398a7/action-slack@v3
+      with:
+        status: success
+        text: '🚀 Deployment successful!'
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+    - name: Notify Slack on Failure
+      if: needs.deploy-production.result == 'failure' || needs.deploy-staging.result == 'failure'
+      uses: 8398a7/action-slack@v3
+      with:
+        status: failure
+        text: '❌ Deployment failed!'
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

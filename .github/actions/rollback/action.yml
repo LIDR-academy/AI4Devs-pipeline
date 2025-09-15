@@ -1,0 +1,109 @@
+name: 'Rollback Deployment'
+description: 'Rollback to previous version on deployment failure'
+inputs:
+  ec2-host:
+    description: 'EC2 instance hostname or IP'
+    required: true
+  ec2-username:
+    description: 'EC2 instance username'
+    required: true
+  ec2-ssh-key:
+    description: 'SSH private key for EC2 access'
+    required: true
+  ecr-registry:
+    description: 'ECR registry URL'
+    required: true
+  environment:
+    description: 'Deployment environment (staging/production)'
+    required: true
+    default: 'production'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Rollback to Previous Version
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ inputs.ec2-host }}
+        username: ${{ inputs.ec2-username }}
+        key: ${{ inputs.ec2-ssh-key }}
+        port: 22
+        timeout: 60s
+        debug: true
+        script: |
+          set -e
+          echo "=== Starting Rollback Process ==="
+          echo "Environment: ${{ inputs.environment }}"
+          echo "Timestamp: $(date)"
+          
+          # Check if there are any backup images
+          echo "Checking for backup images..."
+          BACKUP_IMAGES=$(docker images --format "table {{.Repository}}:{{.Tag}}" | grep "lti-backend-backup" | head -1)
+          
+          if [ -z "$BACKUP_IMAGES" ]; then
+            echo "❌ No backup images found for rollback"
+            echo "Available images:"
+            docker images
+            exit 1
+          fi
+          
+          echo "Found backup image: $BACKUP_IMAGES"
+          
+          # Stop current container
+          echo "Stopping current container..."
+          docker stop lti-backend || echo "No current container to stop"
+          docker rm lti-backend || echo "No current container to remove"
+          
+          # Start backup container
+          echo "Starting backup container..."
+          docker run -d \
+            --name lti-backend \
+            --restart unless-stopped \
+            -p 3010:3010 \
+            --env-file /home/ec2-user/lti-backend/.env \
+            --network host \
+            --health-cmd="curl -f http://localhost:3010/ || exit 1" \
+            --health-interval=30s \
+            --health-timeout=10s \
+            --health-retries=3 \
+            $BACKUP_IMAGES || {
+            echo "Failed to start backup container!"
+            exit 1
+          }
+          
+          # Wait for container to start
+          echo "Waiting for backup container to start..."
+          sleep 15
+          
+          # Health check for rollback
+          echo "Starting health check for rollback..."
+          ROLLBACK_HEALTH_PASSED=false
+          for i in {1..20}; do
+            echo "Rollback health check attempt $i/20..."
+            
+            if curl -f http://0.0.0.0:3010/; then
+              echo "✅ Rollback health check passed!"
+              ROLLBACK_HEALTH_PASSED=true
+              break
+            fi
+            
+            echo "Rollback health check attempt $i failed, retrying in 2 seconds..."
+            sleep 2
+          done
+          
+          if [ "$ROLLBACK_HEALTH_PASSED" = false ]; then
+            echo "❌ Rollback health check failed"
+            echo "Container logs:"
+            docker logs lti-backend
+            exit 1
+          fi
+          
+          # Clean up failed deployment image
+          echo "Cleaning up failed deployment image..."
+          docker image prune -f
+          
+          echo "=== Rollback Complete ==="
+          echo "Environment: ${{ inputs.environment }}"
+          echo "Timestamp: $(date)"
+          echo "Rollback Image: $BACKUP_IMAGES"
+          echo "Health Status: ✅ PASSED"
