@@ -5,7 +5,7 @@ name: AI4Devs Full-Stack CI/CD Pipeline
 on:
   # En Pull Requests hacia main o develop
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, solved-jairopolo]
     types: [opened, synchronize, reopened]  # opened=nuevo PR, synchronize=nuevos commits, reopened=reabrir PR
   # En Push directo a main o develop
   push:
