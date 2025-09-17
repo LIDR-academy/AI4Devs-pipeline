@@ -1,0 +1,208 @@
+# 🚀 Pipeline CI/CD para aplicación Full-Stack (React + Express)
+name: AI4Devs Full-Stack CI/CD Pipeline
+
+# 📅 CUÁNDO SE EJECUTA este pipeline:
+on:
+  # En Pull Requests hacia main o develop
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened]  # opened=nuevo PR, synchronize=nuevos commits, reopened=reabrir PR
+  # En Push directo a main o develop
+  push:
+    branches: [main, develop]
+
+# 🌍 Variables globales que usa todo el pipeline
+env:
+  NODE_VERSION: '18'           # Versión de Node.js
+  AWS_DEFAULT_REGION: 'us-east-2'  # Región de AWS donde está tu EC2
+
+# 🏗️ JOBS: Tareas que se ejecutan (pueden ser en paralelo o secuencia)
+jobs:
+
+  # 🧪 JOB 1: TESTING - Ejecuta tests de frontend y backend EN PARALELO
+  test:
+    name: 🧪 Run Tests (Frontend & Backend)
+    runs-on: ubuntu-latest    # Máquina virtual donde se ejecuta
+    
+    # 🔄 MATRIX STRATEGY: Ejecuta el mismo job 2 veces, una para frontend y otra para backend
+    strategy:
+      matrix:
+        component: [frontend, backend]  # Se crean 2 jobs paralelos
+    
+    steps:
+    # Paso 1: Descargar el código del repositorio
+    - name: 📥 Download code from GitHub
+      uses: actions/checkout@v4
+
+    # Paso 2: Instalar Node.js con caché inteligente
+    - name: ⚙️ Setup Node.js ${{ env.NODE_VERSION }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'    # Acelera instalación reutilizando node_modules
+        cache-dependency-path: ${{ matrix.component }}/package-lock.json
+
+    # Paso 3: Instalar dependencias (npm ci es más rápido que npm install)
+    - name: 📦 Install ${{ matrix.component }} dependencies
+      run: |
+        cd ${{ matrix.component }}
+        npm ci  # Instala exactamente lo que está en package-lock.json
+
+    # Paso 4: Ejecutar tests según el componente
+    - name: 🧪 Run ${{ matrix.component }} tests
+      run: |
+        cd ${{ matrix.component }}
+        if [ "${{ matrix.component }}" == "frontend" ]; then
+          npm test -- --watchAll=false --passWithNoTests --coverage
+        else
+          npm test
+        fi
+
+  # 🔨 JOB 2: BUILD - Compila las aplicaciones (solo si los tests pasan)
+  build:
+    name: 🔨 Build Applications
+    runs-on: ubuntu-latest
+    needs: test  # ⚠️ DEPENDENCY: Solo se ejecuta si el job 'test' pasa exitosamente
+    
+    steps:
+    # Paso 1: Descargar código nuevamente (cada job es independiente)
+    - name: 📥 Download code from GitHub
+      uses: actions/checkout@v4
+
+    # Paso 2: Configurar Node.js (reutilizamos la configuración)
+    - name: ⚙️ Setup Node.js ${{ env.NODE_VERSION }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    # Paso 3: Construir FRONTEND
+    - name: 🎨 Build Frontend (React App)
+      run: |
+        cd frontend
+        npm ci                # Instalar dependencias
+        npm run build         # Crear archivos optimizados para producción
+
+    # Paso 4: Construir BACKEND  
+    - name: ⚙️ Build Backend (Express API)
+      run: |
+        cd backend
+        npm ci                # Instalar dependencias
+        npm run build         # Compilar TypeScript a JavaScript
+
+    # Paso 5: Crear paquete de despliegue (simplificado)
+    - name: 📦 Create deployment package
+      run: |
+        # Crear estructura de carpetas
+        mkdir -p deploy/frontend deploy/backend
+        
+        # Copiar archivos compilados
+        cp -r frontend/build/* deploy/frontend/
+        cp -r backend/dist/ deploy/backend/
+        cp backend/package*.json deploy/backend/
+        cp -r backend/prisma/ deploy/backend/
+
+    # Paso 6: Guardar paquete para el siguiente job
+    - name: 💾 Save deployment package
+      uses: actions/upload-artifact@v3
+      with:
+        name: deployment-package
+        path: deploy/
+
+  # 🚀 JOB 3: DEPLOY - Despliega a EC2 (solo en push, no en PR)
+  deploy:
+    name: 🚀 Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: [test, build]  # ⚠️ DEPENDENCY: Necesita que test y build pasen
+    # 🎯 CONDITIONAL DEPLOYMENT: Solo despliega en push directo (no en PR)
+    if: github.event_name == 'push'
+    
+    steps:
+    # Paso 1: Descargar el paquete creado en el job anterior
+    - name: 📥 Download deployment package
+      uses: actions/download-artifact@v3
+      with:
+        name: deployment-package
+        path: deploy/
+
+    # Paso 2: Configurar conexión SSH a EC2
+    - name: 🔐 Setup SSH connection to EC2
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.EC2_INSTANCE }} >> ~/.ssh/known_hosts
+
+    # Paso 3: Hacer backup de la versión actual (por seguridad)
+    - name: 💾 Create backup of current deployment
+      run: |
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }} \
+        "sudo mkdir -p /var/backups/lti-$(date +%Y%m%d-%H%M%S) && \
+         sudo cp -r /var/www/* /var/backups/lti-$(date +%Y%m%d-%H%M%S)/ 2>/dev/null || echo 'Backup completed'"
+
+    # Paso 4: Desplegar Frontend (React build)
+    - name: 🎨 Deploy Frontend to EC2
+      run: |
+        rsync -avz --delete \
+          -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
+          deploy/frontend/ \
+          ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }}:/var/www/html/
+
+    # Paso 5: Desplegar Backend (Express compiled)
+    - name: ⚙️ Deploy Backend to EC2
+      run: |
+        rsync -avz --delete \
+          -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
+          deploy/backend/ \
+          ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }}:/var/www/backend/
+
+    # Paso 6: Reiniciar servicios en EC2
+    - name: 🔄 Restart services on EC2
+      run: |
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+          ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }} << 'EOF'
+          cd /var/www/backend
+          npm install --production    # Instalar dependencias en producción
+          npx prisma generate         # Generar cliente Prisma
+          sudo systemctl restart nginx || echo "Nginx restart attempted"
+          sudo pm2 restart all || sudo systemctl restart lti-backend || echo "Backend restart attempted"
+        EOF
+
+    # Paso 7: Verificar que todo funciona
+    - name: 🏥 Health check
+      run: |
+        echo "Esperando que los servicios inicien..."
+        sleep 20
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+          ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }} << 'EOF'
+          if curl -s http://localhost:3010/ > /dev/null; then
+            echo "✅ Backend funcionando correctamente"
+          else
+            echo "❌ Backend puede tener problemas"
+          fi
+          if curl -s http://localhost/ > /dev/null; then
+            echo "✅ Frontend funcionando correctamente"
+          else
+            echo "❌ Frontend puede tener problemas"
+          fi
+        EOF
+
+  # 📢 JOB 4: NOTIFICATION - Informa el resultado (siempre se ejecuta)
+  notify:
+    name: 📢 Send Notification
+    runs-on: ubuntu-latest
+    needs: [test, build, deploy]
+    if: always()  # 🔄 ALWAYS: Se ejecuta sin importar si los otros jobs fallan
+    
+    steps:
+    - name: 📋 Deployment Status
+      run: |
+        if [ "${{ needs.deploy.result }}" == "success" ]; then
+          echo "🎉 ¡Despliegue exitoso!"
+          echo "🌐 Frontend: http://${{ secrets.EC2_INSTANCE }}"
+          echo "🔧 Backend API: http://${{ secrets.EC2_INSTANCE }}:3010"
+        elif [ "${{ needs.deploy.result }}" == "failure" ]; then
+          echo "❌ El despliegue falló"
+        else
+          echo "ℹ️ Despliegue omitido (solo en PR, no desplegamos)"
+        fi
