@@ -239,12 +239,28 @@ jobs:
           npm install --production    # Instalar dependencias en producción
           npx prisma generate         # Generar cliente Prisma
           
+          # Instalar PM2 si no existe
+          if ! command -v pm2 &> /dev/null; then
+            echo "Installing PM2..."
+            sudo npm install -g pm2
+          fi
+          
+          # Detener procesos anteriores del backend
+          pm2 stop lti-backend 2>/dev/null || echo "No previous backend process to stop"
+          pm2 delete lti-backend 2>/dev/null || echo "No previous backend process to delete"
+          
+          # Iniciar el backend con PM2
+          pm2 start dist/index.js --name lti-backend --restart-delay 3000
+          pm2 save  # Guardar configuración de PM2
+          
+          # Configurar PM2 para autostart
+          sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u ec2-user --hp /home/ec2-user
+          
           # Restaurar permisos para Nginx después del despliegue
           sudo chown -R nginx:nginx /var/www/ || sudo chown -R www-data:www-data /var/www/
           sudo chmod -R 755 /var/www/
           
           sudo systemctl restart nginx || echo "Nginx restart attempted"
-          sudo pm2 restart all || sudo systemctl restart lti-backend || echo "Backend restart attempted"
         EOF
 
     # Paso 10: Verificar que todo funciona
