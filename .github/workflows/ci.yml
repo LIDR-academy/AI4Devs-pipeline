@@ -151,7 +151,62 @@ jobs:
           "sudo mkdir -p /var/www/frontend /var/www/backend && \
            sudo chown -R ${{ secrets.EC2_USER }}:${{ secrets.EC2_USER }} /var/www/"
 
-    # Paso 5: Desplegar Frontend (React build)
+    # Paso 5: Instalar y configurar Nginx si no existe
+    - name: 🌐 Setup Nginx web server
+      run: |
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+          ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }} << 'EOF'
+          
+          # Verificar si Nginx está instalado
+          if ! command -v nginx &> /dev/null; then
+            echo "Nginx no encontrado. Instalando..."
+            sudo yum update -y
+            sudo yum install -y nginx
+          else
+            echo "Nginx ya está instalado"
+          fi
+          
+          # Crear configuración para el frontend
+          sudo tee /etc/nginx/conf.d/frontend.conf > /dev/null <<'NGINXCONF'
+        server {
+            listen 80;
+            server_name _;
+            
+            # Frontend (React app)
+            location / {
+                root /var/www/frontend;
+                index index.html;
+                try_files $uri $uri/ /index.html;
+            }
+            
+            # Backend API proxy
+            location /api/ {
+                proxy_pass http://localhost:3010/;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection 'upgrade';
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_cache_bypass $http_upgrade;
+            }
+        }
+        NGINXCONF
+          
+          # Configurar permisos
+          sudo chown -R nginx:nginx /var/www/ || sudo chown -R www-data:www-data /var/www/
+          sudo chmod -R 755 /var/www/
+          
+          # Habilitar e iniciar Nginx
+          sudo systemctl enable nginx || echo "Nginx enable failed"
+          sudo systemctl start nginx || echo "Nginx start failed"
+          
+          # Verificar configuración
+          sudo nginx -t || echo "Nginx config test failed"
+        EOF
+
+    # Paso 6: Desplegar Frontend (React build)
     - name: 🎨 Deploy Frontend to EC2
       run: |
         rsync -avz --delete \
@@ -159,7 +214,7 @@ jobs:
           deploy/frontend/ \
           ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }}:/var/www/frontend/
 
-    # Paso 6: Desplegar Backend (Express compiled)
+    # Paso 7: Desplegar Backend (Express compiled)
     - name: ⚙️ Deploy Backend to EC2
       run: |
         rsync -avz --delete \
@@ -167,7 +222,7 @@ jobs:
           deploy/backend/ \
           ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }}:/var/www/backend/
 
-    # Paso 7: Reiniciar servicios en EC2
+    # Paso 8: Reiniciar servicios en EC2
     - name: 🔄 Restart services on EC2
       run: |
         ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
@@ -179,7 +234,7 @@ jobs:
           sudo pm2 restart all || sudo systemctl restart lti-backend || echo "Backend restart attempted"
         EOF
 
-    # Paso 8: Verificar que todo funciona
+    # Paso 9: Verificar que todo funciona
     - name: 🏥 Health check
       run: |
         echo "Esperando que los servicios inicien..."
