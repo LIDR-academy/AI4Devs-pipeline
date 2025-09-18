@@ -60,22 +60,38 @@ tengo el siguiente error en el step: 🧪 Run ${{ matrix.component }} tests para
 ## Prompt #3: Error en la ejecución del segundo intento del job
 
 ```markdown
-ahora tengo este error en la ejecución del job: Current runner version: '2.328.0'                 │
-│   Runner Image Provisioner                                                                          │
-│   Operating System                                                                                  │
-│   Runner Image                                                                                      │
-│   GITHUB_TOKEN Permissions                                                                          │
-│   Secret source: Actions                                                                            │
-│   Prepare workflow directory                                                                        │
-│   Prepare all required actions                                                                      │
-│   Getting action download info                                                                      │
-│   Error: This request has been automatically failed because it uses a deprecated version of         │
-│   `actions/upload-artifact: v3`. Learn more:                                                        │
-│   https://github.blog/changelog/2024-04-16-deprecation-notice-v3-of-the-artifact-actions/  
+ahora tengo este error en la ejecución del job: Current runner version: '2.328.0'                 
+   Runner Image Provisioner                                                                          
+   Operating System                                                                                  
+   Runner Image                                                                                      
+   GITHUB_TOKEN Permissions                                                                          
+   Secret source: Actions                                                                            
+   Prepare workflow directory                                                                        
+   Prepare all required actions                                                                      
+   Getting action download info                                                                      
+   Error: This request has been automatically failed because it uses a deprecated version of         
+   `actions/upload-artifact: v3`. Learn more:                                                        
+   https://github.blog/changelog/2024-04-16-deprecation-notice-v3-of-the-artifact-actions/  
 ```
 
 ## Prompt #3: Error en la ejecución del tercer intento del job
 
 ```markdown
 ahora tengo este error en el paso: ⚙️ Setup Node.js: Error: Dependencies lock file is not found in /home/runner/work/AI4Devs-pipeline-solved-jairopolo/AI4Devs-pipeline-solved-jairopolo. Supported file patterns: package-lock.json,npm-shrinkwrap.json,yarn.lock  
+```
+
+```markdown
+ahora el job de Deploy Frontend to EC2 me dice: Run rsync -avz --delete \                         
+     rsync -avz --delete \                                                                           
+       -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \                                       
+       deploy/frontend/ \                                                                            
+       ***@***:/var/www/html/                                                                        
+     shell: /usr/bin/bash -e {0}                                                                     
+     env:                                                                                            
+       NODE_VERSION: 18                                                                              
+       AWS_DEFAULT_REGION: us-east-2                                                                 
+   sending incremental file list                                                                     
+   rsync: [Receiver] mkdir "/var/www/html" failed: No such file or directory (2)                     
+   rsync error: error in file IO (code 11) at main.c(791) [Receiver=3.4.0]                           
+   Error: Process completed with exit code 11.
 ```

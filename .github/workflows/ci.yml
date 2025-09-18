@@ -143,15 +143,23 @@ jobs:
         "sudo mkdir -p /var/backups/lti-$(date +%Y%m%d-%H%M%S) && \
          sudo cp -r /var/www/* /var/backups/lti-$(date +%Y%m%d-%H%M%S)/ 2>/dev/null || echo 'Backup completed'"
 
-    # Paso 4: Desplegar Frontend (React build)
+    # Paso 4: Crear directorios necesarios en EC2
+    - name: 📁 Create deployment directories on EC2
+      run: |
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+          ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }} \
+          "sudo mkdir -p /var/www/frontend /var/www/backend && \
+           sudo chown -R ${{ secrets.EC2_USER }}:${{ secrets.EC2_USER }} /var/www/"
+
+    # Paso 5: Desplegar Frontend (React build)
     - name: 🎨 Deploy Frontend to EC2
       run: |
         rsync -avz --delete \
           -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
           deploy/frontend/ \
-          ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }}:/var/www/html/
+          ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }}:/var/www/frontend/
 
-    # Paso 5: Desplegar Backend (Express compiled)
+    # Paso 6: Desplegar Backend (Express compiled)
     - name: ⚙️ Deploy Backend to EC2
       run: |
         rsync -avz --delete \
@@ -159,7 +167,7 @@ jobs:
           deploy/backend/ \
           ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }}:/var/www/backend/
 
-    # Paso 6: Reiniciar servicios en EC2
+    # Paso 7: Reiniciar servicios en EC2
     - name: 🔄 Restart services on EC2
       run: |
         ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
@@ -171,7 +179,7 @@ jobs:
           sudo pm2 restart all || sudo systemctl restart lti-backend || echo "Backend restart attempted"
         EOF
 
-    # Paso 7: Verificar que todo funciona
+    # Paso 8: Verificar que todo funciona
     - name: 🏥 Health check
       run: |
         echo "Esperando que los servicios inicien..."
