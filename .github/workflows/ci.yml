@@ -194,8 +194,8 @@ jobs:
         }
         NGINXCONF
           
-          # Configurar permisos
-          sudo chown -R nginx:nginx /var/www/ || sudo chown -R www-data:www-data /var/www/
+          # Configurar permisos - nginx puede leer, pero el usuario EC2 puede escribir
+          sudo chown -R ${{ secrets.EC2_USER }}:nginx /var/www/ || sudo chown -R ${{ secrets.EC2_USER }}:www-data /var/www/
           sudo chmod -R 755 /var/www/
           
           # Habilitar e iniciar Nginx
@@ -206,7 +206,15 @@ jobs:
           sudo nginx -t || echo "Nginx config test failed"
         EOF
 
-    # Paso 6: Desplegar Frontend (React build)
+    # Paso 6: Asegurar permisos correctos para deployment
+    - name: 🔐 Set permissions for deployment
+      run: |
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+          ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }} \
+          "sudo chown -R ${{ secrets.EC2_USER }}:${{ secrets.EC2_USER }} /var/www/ && \
+           sudo chmod -R 755 /var/www/"
+
+    # Paso 7: Desplegar Frontend (React build)
     - name: 🎨 Deploy Frontend to EC2
       run: |
         rsync -avz --delete \
@@ -214,7 +222,7 @@ jobs:
           deploy/frontend/ \
           ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }}:/var/www/frontend/
 
-    # Paso 7: Desplegar Backend (Express compiled)
+    # Paso 8: Desplegar Backend (Express compiled)
     - name: ⚙️ Deploy Backend to EC2
       run: |
         rsync -avz --delete \
@@ -222,7 +230,7 @@ jobs:
           deploy/backend/ \
           ${{ secrets.EC2_USER }}@${{ secrets.EC2_INSTANCE }}:/var/www/backend/
 
-    # Paso 8: Reiniciar servicios en EC2
+    # Paso 9: Reiniciar servicios en EC2
     - name: 🔄 Restart services on EC2
       run: |
         ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
@@ -230,11 +238,16 @@ jobs:
           cd /var/www/backend
           npm install --production    # Instalar dependencias en producción
           npx prisma generate         # Generar cliente Prisma
+          
+          # Restaurar permisos para Nginx después del despliegue
+          sudo chown -R nginx:nginx /var/www/ || sudo chown -R www-data:www-data /var/www/
+          sudo chmod -R 755 /var/www/
+          
           sudo systemctl restart nginx || echo "Nginx restart attempted"
           sudo pm2 restart all || sudo systemctl restart lti-backend || echo "Backend restart attempted"
         EOF
 
-    # Paso 9: Verificar que todo funciona
+    # Paso 10: Verificar que todo funciona
     - name: 🏥 Health check
       run: |
         echo "Esperando que los servicios inicien..."
