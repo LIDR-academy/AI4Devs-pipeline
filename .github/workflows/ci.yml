@@ -9,7 +9,7 @@ on:
     types: [opened, synchronize, reopened]  # opened=nuevo PR, synchronize=nuevos commits, reopened=reabrir PR
   # En Push directo a main o develop
   push:
-    branches: [main, develop]
+    branches: [main, develop, solved-jairopolo]
 
 # 🌍 Variables globales que usa todo el pipeline
 env:
