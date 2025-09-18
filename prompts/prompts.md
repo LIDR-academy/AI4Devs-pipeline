@@ -73,3 +73,9 @@ ahora tengo este error en la ejecución del job: Current runner version: '2.328.
 │   `actions/upload-artifact: v3`. Learn more:                                                        │
 │   https://github.blog/changelog/2024-04-16-deprecation-notice-v3-of-the-artifact-actions/  
 ```
+
+## Prompt #3: Error en la ejecución del tercer intento del job
+
+```markdown
+ahora tengo este error en el paso: ⚙️ Setup Node.js: Error: Dependencies lock file is not found in /home/runner/work/AI4Devs-pipeline-solved-jairopolo/AI4Devs-pipeline-solved-jairopolo. Supported file patterns: package-lock.json,npm-shrinkwrap.json,yarn.lock  
+```
