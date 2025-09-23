@@ -46,12 +46,33 @@ app.post('/upload', uploadFile);
 // Route to get candidates by position
 app.use('/positions', positionRoutes);
 
+// Health check endpoint for deployment pipeline
+app.get('/health', async (req, res) => {
+  try {
+    // Check database connection
+    await prisma.$queryRaw`SELECT 1`;
+    
+    res.status(200).json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      database: 'connected'
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
+      error: 'Database connection failed'
+    });
+  }
+});
+
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
 });
 
-const port = 3010;
+const port = process.env.PORT || 3010;
 
 app.get('/', (req, res) => {
   res.send('Hola LTI!');

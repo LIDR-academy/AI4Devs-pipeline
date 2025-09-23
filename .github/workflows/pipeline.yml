@@ -1,0 +1,244 @@
+name: Backend CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  NODE_VERSION: "18"
+  BACKEND_PORT: 3010
+
+jobs:
+  test:
+    name: Run Backend Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: ./backend
+        run: npx prisma generate
+
+      - name: Run database migrations
+        working-directory: ./backend
+        run: npx prisma db push
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+
+      - name: Run tests
+        working-directory: ./backend
+        run: npm test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+
+  build:
+    name: Build Backend
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: ./backend
+        run: npx prisma generate
+
+      - name: Build TypeScript
+        working-directory: ./backend
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-build
+          path: backend/dist/
+          retention-days: 1
+
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-build
+          path: backend/dist/
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script: |
+            # Create application directory if it doesn't exist
+            mkdir -p /opt/ai4devs-backend
+
+            # Navigate to application directory
+            cd /opt/ai4devs-backend
+
+            # Stop existing application if running
+            pm2 stop ai4devs-backend || true
+            pm2 delete ai4devs-backend || true
+
+            # Backup current version
+            if [ -d "current" ]; then
+              mv current backup-$(date +%Y%m%d-%H%M%S)
+            fi
+
+            # Create new deployment directory
+            mkdir -p current
+
+            # Copy new build files
+            cp -r /tmp/backend/dist/* current/
+
+            # Copy package.json and package-lock.json
+            cp /tmp/backend/package*.json current/
+
+            # Install production dependencies
+            cd current
+            npm ci --only=production
+
+            # Generate Prisma client
+            npx prisma generate
+
+            # Set up environment variables
+            cat > .env << EOF
+            NODE_ENV=production
+            PORT=${{ env.BACKEND_PORT }}
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            EOF
+
+            # Start application with PM2
+            pm2 start dist/index.js --name ai4devs-backend --instances 1 --max-memory-restart 1G
+
+            # Save PM2 configuration
+            pm2 save
+
+            # Setup PM2 to start on boot
+            pm2 startup systemd -u ${{ secrets.EC2_USERNAME }} --hp /home/${{ secrets.EC2_USERNAME }}
+
+            # Health check
+            sleep 10
+            if curl -f http://localhost:${{ env.BACKEND_PORT }}/health || curl -f http://localhost:${{ env.BACKEND_PORT }}/; then
+              echo "Deployment successful"
+            else
+              echo "Deployment failed - health check failed"
+              # Rollback to previous version
+              if [ -d "../backup-"* ]; then
+                LATEST_BACKUP=$(ls -t ../backup-* | head -n1)
+                rm -rf current
+                mv $LATEST_BACKUP current
+                cd current
+                pm2 start dist/index.js --name ai4devs-backend
+                pm2 save
+              fi
+              exit 1
+            fi
+
+      - name: Configure Nginx (Optional)
+        uses: appleboy/ssh-action@v1.0.3
+        if: success()
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script: |
+            # Create Nginx configuration for reverse proxy
+            sudo tee /etc/nginx/sites-available/ai4devs-backend << EOF
+            server {
+                listen 80;
+                server_name ${{ secrets.DOMAIN_NAME || 'your-domain.com' }};
+                
+                location / {
+                    proxy_pass http://localhost:3010;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection 'upgrade';
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                    proxy_cache_bypass \$http_upgrade;
+                }
+            }
+            EOF
+
+            # Enable the site
+            sudo ln -sf /etc/nginx/sites-available/ai4devs-backend /etc/nginx/sites-enabled/
+
+            # Test Nginx configuration
+            sudo nginx -t
+
+            # Reload Nginx
+            sudo systemctl reload nginx
+
+  notify:
+    name: Notify Deployment Status
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: always()
+
+    steps:
+      - name: Notify Success
+        if: needs.deploy.result == 'success'
+        run: |
+          echo "✅ Deployment successful!"
+          echo "Backend deployed to EC2 instance"
+          echo "Application running on port 3010"
+
+      - name: Notify Failure
+        if: needs.deploy.result == 'failure'
+        run: |
+          echo "❌ Deployment failed!"
+          echo "Check the logs for more details"
+          exit 1
