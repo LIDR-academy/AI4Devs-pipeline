@@ -23,4 +23,19 @@ describe('getCandidatesByPosition', () => {
       { fullName: 'John Doe', currentInterviewStep: 'Technical Interview', averageScore: 4 },
     ]);
   });
+
+  it('should return 200 with empty array when position has no candidates', async () => {
+    const req = { params: { id: '99' } } as unknown as Request;
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    } as unknown as Response;
+
+    (getCandidatesByPositionService as jest.Mock).mockResolvedValue([]);
+
+    await getCandidatesByPosition(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith([]);
+  });
 });

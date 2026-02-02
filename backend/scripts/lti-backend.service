@@ -1,0 +1,22 @@
+# Systemd unit para el backend LTI (Node/Express)
+# Copiar a /etc/systemd/system/ y ajustar paths/usuario:
+#   sudo cp lti-backend.service /etc/systemd/system/
+#   sudo sed -i "s|/home/ec2-user/app|TU_TARGET_DIR|g" /etc/systemd/system/lti-backend.service
+#   sudo systemctl daemon-reload && sudo systemctl enable lti-backend && sudo systemctl start lti-backend
+
+[Unit]
+Description=LTI Backend (Node Express)
+After=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/home/ec2-user/app
+ExecStart=/usr/bin/node dist/index.js
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
