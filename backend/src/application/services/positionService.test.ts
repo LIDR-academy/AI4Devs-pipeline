@@ -41,5 +41,12 @@ describe('getCandidatesByPositionService', () => {
       },
     ]);
   });
+
+  it('should throw when findMany fails', async () => {
+    jest.spyOn(prisma.application, 'findMany').mockRejectedValue(new Error('DB error'));
+    await expect(getCandidatesByPositionService(1)).rejects.toThrow(
+      'Error retrieving candidates by position'
+    );
+  });
 });
 
