@@ -1,0 +1,62 @@
+name: CI/CD Pipeline
+
+on:
+  pull_request:
+    types: [synchronize]
+
+jobs:
+  BackEnd-CI-CD:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+
+      - name: Install Dependencies
+        run: |
+          cd backend
+          npm install
+
+      - name: Run Tests
+        run: |
+          cd backend
+          npm test
+
+      - name: Build Backend
+        run: |
+          cd backend
+          npm run build
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Note: Update '/path/to/repo' to the actual path on your EC2 instance
+            cd ~/app/backend || exit 1
+            
+            # Pull latest changes
+            git pull origin main
+            
+            # Install dependencies and build
+            npm install
+            npm run build
+            
+            # Restart service (Using PM2 as recommended in README)
+            # Failsafe: start if not running, restart if running
+            pm2 restart backend || pm2 start dist/index.js --name "backend"

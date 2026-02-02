@@ -161,54 +161,40 @@ POST http://localhost:3010/candidates
 ```
 
 
-## Configuración de EC2 y GitHub Actions
+## CI/CD Pipeline (GitHub Actions)
+Este proyecto cuenta con un pipeline automatizado configurado en `.github/workflows/pipeline.yml`.
 
-Para ejecutar este proyecto en una instancia EC2 y asegurarte de que GitHub Actions funcione correctamente, sigue estos pasos:
+### Descripción del Flujo
+1. **Trigger:** Se ejecuta automáticamente al hacer push a una rama con un Pull Request abierto (`synchronize`).
+2. **Setup:** Configura Node.js v16.
+3. **Seguridad (OIDC):** Se autentica con AWS usando OpenID Connect (sin Access Keys permanentes).
+4. **Test & Build:** Ejecuta `npm test` y `npm run build` en el backend.
+5. **Deploy:** Se conecta vía SSH a la instancia EC2 y despliega la nueva versión.
 
-### Configuración de EC2
+### Requisitos Previos (Secrets de GitHub)
+Para que el despliegue funcione, debes configurar los siguientes Secretos en el repositorio:
 
-1. **Crear una Instancia EC2**:
-  - Inicia sesión en la consola de AWS y navega a EC2.
-  - Lanza una nueva instancia utilizando una AMI de Amazon Linux 2 o Ubuntu.
-  - Asegúrate de seleccionar un tipo de instancia adecuado (por ejemplo, `t2.micro` para pruebas).
+| Nombre | Descripción | Origen |
+| :--- | :--- | :--- |
+| `AWS_ROLE_ARN` | ARN del Rol IAM para OIDC | Output de `./setup-oidc.sh` |
+| `EC2_HOST` | IP Pública de la instancia | Output de `./setup-ec2.sh` |
+| `EC2_USER` | Usuario SSH (default: `ec2-user`) | `ec2-user` |
+| `EC2_SSH_KEY` | Clave Privada PEM | Contenido de `LTI-KeyPair.pem` |
 
-2. **Configurar el Grupo de Seguridad**:
-  - Asegúrate de que el grupo de seguridad asociado a tu instancia permita el tráfico en los siguientes puertos:
-    - **22**: Para SSH (acceso remoto).
-    - **80**: Para HTTP (si estás usando Nginx o un servidor web).
-    - **8080**: Para el backend (puerto donde se ejecuta tu aplicación).
-  - Puedes agregar reglas de entrada en el grupo de seguridad para permitir el acceso desde cualquier IP (0.0.0.0/0) para propósitos de desarrollo, pero considera restringirlo en producción.
+### Scripts de Ayuda
+En la raíz del proyecto encontrarás scripts para facilitar la configuración:
+- `setup-oidc.sh`: Configura el Identity Provider y el Rol IAM en AWS.
+- `setup-ec2.sh`: Crea la instancia EC2, Security Groups y Key Pairs.
 
-3. **Instalar Dependencias en EC2**:
-  - Conéctate a tu instancia EC2 a través de SSH:
-    ```
-    ssh -i your-key.pem ec2-user@your-ec2-public-ip
-    ```
-  - Instala Node.js y npm:
-    ```
-    curl -sL https://rpm.nodesource.com/setup_16.x | sudo bash -
-    sudo yum install -y nodejs
-    ```
-  - Instala PM2 para gestionar tu aplicación:
-    ```
-    sudo npm install -g pm2
-    ```
-  - Instala Nginx si lo necesitas:
-    ```
-    sudo yum install -y nginx
-    ```
+### Instrucciones de Testeo
+Para probar el pipeline:
+1. Crea una nueva rama: `git checkout -b feature/test-ci`.
+2. Realiza un cambio y haz commit.
+3. Haz push: `git push origin feature/test-ci`.
+4. **Abre un Pull Request** en GitHub contra `main`.
+5. Verifica la pestaña "Actions" en GitHub para ver el progreso.
 
-4. **Configurar Variables de Entorno**:
-  - Crea un archivo `.env` en el directorio raíz del backend con las siguientes variables:
-    ```
-    DATABASE_URL=postgresql://user:password@localhost:5432/mydatabase
-    ```
-  - Asegúrate de reemplazar `user`, `password` y `mydatabase` con los valores correctos.
-
-### Variables en GitHub Actions
-
-Para que el flujo de trabajo de GitHub Actions funcione correctamente, debes configurar las siguientes variables en los secretos de tu repositorio:
-
-1. **AWS_ACCESS_ID**: Tu ID de clave de acceso de AWS.
-2. **AWS_ACCESS_KEY**: Tu clave de acceso secreta de AWS.
-3. **EC2_INSTANCE**: La dirección IP pública o el nombre DNS de tu instancia EC2.
+### Guía de Mantenimiento
+El despliegue usa `PM2` para gestionar el proceso del backend.
+- **Reinicio:** El pipeline ejecuta `pm2 restart backend`.
+- **Logs:** Puedes ver los logs en la instancia con `pm2 logs backend`.
