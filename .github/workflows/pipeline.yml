@@ -60,10 +60,10 @@ jobs:
                     
                     if [ -n "$PARENT_REPO" ]; then
                       echo "🍴 Es un fork de: $PARENT_REPO"
-                      echo "🔍 Buscando PRs en upstream con head $OWNER:$BRANCH..."
+                      echo "🔍 Buscando PRs en upstream con headRefName=$BRANCH..."
                       
-                      # En PRs cross-fork, el head tiene formato owner:branch
-                      PR_COUNT=$(gh pr list --repo $PARENT_REPO --head "$OWNER:$BRANCH" --state open --json number --jq 'length')
+                      # Para PRs cross-fork, --head no funciona bien, usamos jq para filtrar
+                      PR_COUNT=$(gh pr list --repo $PARENT_REPO --state open --json number,headRefName --jq "[.[] | select(.headRefName == \"$BRANCH\")] | length")
                       echo "📊 PRs en upstream ($PARENT_REPO): $PR_COUNT"
                     else
                       echo "📌 No es un fork, no hay upstream que verificar"
