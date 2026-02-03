@@ -1,0 +1,104 @@
+name: Backend CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'backend/**'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'backend/**'
+
+jobs:
+  continuous-integration:
+    name: CI - Test & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        # Necesario para que el código compile y los tests corran
+        run: npx prisma generate
+        env:
+          # Prisma necesita esto incluso si solo genera tipos, usa una dummy url o la real de staging
+          DATABASE_URL: "postgresql://user:password@localhost:5432/mydb" 
+
+      - name: Run Unit Tests
+        run: npm run test
+
+      - name: Build Application
+        run: npm run build
+
+  continuous-deployment:
+    name: CD - Deploy to EC2
+    needs: continuous-integration
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # --- Configuración (Modificar según tu servidor) ---
+            APP_DIR="/home/ubuntu/AI4Devs-pipeline"
+            BACKEND_DIR="$APP_DIR/backend"
+            PM2_PROCESS_NAME="backend-api"
+            # ---------------------------------------------------
+
+            echo "🚀 Iniciando despliegue..."
+
+            # 1. Navegar al directorio del proyecto git
+            if [ -d "$APP_DIR" ]; then
+              cd $APP_DIR
+              git pull origin main
+            else
+              echo "❌ Error: El directorio $APP_DIR no existe. Asegúrate de clonar el repo primero."
+              exit 1
+            fi
+
+            # 2. Actualizar Backend
+            cd $BACKEND_DIR
+            
+            echo "📦 Instalando dependencias..."
+            npm ci --production
+
+            echo "generate Prisma Client..."
+            npx prisma generate
+
+            echo "🗄️ Aplicando migraciones..."
+            # Asegúrate de que existe el .env con DATABASE_URL en el servidor
+            npx prisma migrate deploy
+
+            echo "BUILDING..."
+            npm run build
+
+            # 3. Reiniciar PM2
+            echo "🔄 Reiniciando aplicación..."
+            if pm2 list | grep -q "$PM2_PROCESS_NAME"; then
+                pm2 reload $PM2_PROCESS_NAME
+            else
+                echo "⚠️ El proceso PM2 no existe, iniciándolo..."
+                pm2 start dist/index.js --name $PM2_PROCESS_NAME
+            fi
+
+            echo "✅ Despliegue finalizado con éxito."
