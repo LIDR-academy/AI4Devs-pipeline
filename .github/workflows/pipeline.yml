@@ -43,14 +43,14 @@ jobs:
                   BRANCH="${{ github.ref_name }}"
                   REPO="${{ github.repository }}"
                   OWNER="${{ github.repository_owner }}"
-                  
+
                   echo "🔍 Buscando PRs abiertos para la rama: $BRANCH"
                   echo "📂 Repositorio actual: $REPO"
-                  
+
                   # Buscar PRs en el repositorio actual
                   PR_COUNT=$(gh pr list --repo $REPO --head $BRANCH --state open --json number --jq 'length')
                   echo "📊 PRs en repo actual ($REPO): $PR_COUNT"
-                  
+
                   # Si no hay PRs, verificar si es un fork y buscar en el upstream
                   if [ "$PR_COUNT" -eq 0 ]; then
                     echo "🔄 Verificando si el repositorio es un fork..."
@@ -69,7 +69,7 @@ jobs:
                       echo "📌 No es un fork, no hay upstream que verificar"
                     fi
                   fi
-                  
+
                   # Evaluar resultado final
                   if [ "$PR_COUNT" -gt 0 ]; then
                     echo "✅ Rama tiene PR abierto - Pipeline continuará"
