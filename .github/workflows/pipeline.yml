@@ -3,10 +3,10 @@
 # =============================================================================
 # Este workflow se ejecuta SOLO cuando:
 # 1. Se hace push a una rama (excepto main/master)
-# 2. Esa rama tiene un Pull Request abierto
+# 2. Esa rama tiene un Pull Request abierto (en el repo actual O en upstream si es fork)
 #
 # Jobs:
-# 1. check-pr: Verifica si existe PR abierto para la rama
+# 1. check-pr: Verifica si existe PR abierto para la rama (soporta forks)
 # 2. test: Ejecuta tests del backend
 # 3. build: Compila TypeScript y genera artifact
 # 4. deploy: Despliega en EC2 via SSH
@@ -40,9 +40,37 @@ jobs:
               env:
                   GH_TOKEN: ${{ github.token }}
               run: |
-                  echo "🔍 Buscando PRs abiertos para la rama: ${{ github.ref_name }}"
-                  PR_COUNT=$(gh pr list --repo ${{ github.repository }} --head ${{ github.ref_name }} --state open --json number --jq 'length')
-                  echo "📊 PRs encontrados: $PR_COUNT"
+                  BRANCH="${{ github.ref_name }}"
+                  REPO="${{ github.repository }}"
+                  OWNER="${{ github.repository_owner }}"
+                  
+                  echo "🔍 Buscando PRs abiertos para la rama: $BRANCH"
+                  echo "📂 Repositorio actual: $REPO"
+                  
+                  # Buscar PRs en el repositorio actual
+                  PR_COUNT=$(gh pr list --repo $REPO --head $BRANCH --state open --json number --jq 'length')
+                  echo "📊 PRs en repo actual ($REPO): $PR_COUNT"
+                  
+                  # Si no hay PRs, verificar si es un fork y buscar en el upstream
+                  if [ "$PR_COUNT" -eq 0 ]; then
+                    echo "🔄 Verificando si el repositorio es un fork..."
+                    
+                    # Obtener info del repositorio para ver si es fork
+                    PARENT_REPO=$(gh api repos/$REPO --jq '.parent.full_name // empty')
+                    
+                    if [ -n "$PARENT_REPO" ]; then
+                      echo "🍴 Es un fork de: $PARENT_REPO"
+                      echo "🔍 Buscando PRs en upstream con head $OWNER:$BRANCH..."
+                      
+                      # En PRs cross-fork, el head tiene formato owner:branch
+                      PR_COUNT=$(gh pr list --repo $PARENT_REPO --head "$OWNER:$BRANCH" --state open --json number --jq 'length')
+                      echo "📊 PRs en upstream ($PARENT_REPO): $PR_COUNT"
+                    else
+                      echo "📌 No es un fork, no hay upstream que verificar"
+                    fi
+                  fi
+                  
+                  # Evaluar resultado final
                   if [ "$PR_COUNT" -gt 0 ]; then
                     echo "✅ Rama tiene PR abierto - Pipeline continuará"
                     echo "has_pr=true" >> $GITHUB_OUTPUT
