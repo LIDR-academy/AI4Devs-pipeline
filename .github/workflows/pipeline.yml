@@ -1,0 +1,161 @@
+name: CI/CD Pipeline — LTI Backend
+
+# ─────────────────────────────────────────────────────
+# Trigger: push sobre cualquier rama que tenga un PR
+# abierto hacia main (usa pull_request sincronizado).
+# ─────────────────────────────────────────────────────
+on:
+  push:
+    branches-ignore:
+      - main          # los push directos a main no activan el pipeline
+  pull_request:
+    branches:
+      - main          # activa en PRs cuyo destino sea main
+
+# Evita ejecuciones duplicadas en la misma rama/PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '18'
+  WORKING_DIR: ./backend
+
+# ════════════════════════════════════════════════════
+# JOB 1 — TEST
+# Ejecuta las pruebas unitarias / integración con Jest
+# ════════════════════════════════════════════════════
+jobs:
+  test:
+    name: 🧪 Unit & Integration Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: ${{ env.WORKING_DIR }}
+        run: npx prisma generate
+
+      - name: Run tests
+        working-directory: ${{ env.WORKING_DIR }}
+        run: npm test -- --passWithNoTests --forceExit
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+# ════════════════════════════════════════════════════
+# JOB 2 — BUILD
+# Compila TypeScript → dist/ y sube el artefacto
+# ════════════════════════════════════════════════════
+  build:
+    name: 🏗️  Build Backend Artifact
+    runs-on: ubuntu-latest
+    needs: test          # solo se ejecuta si test pasa
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: ${{ env.WORKING_DIR }}
+        run: npx prisma generate
+
+      - name: Compile TypeScript (npm run build → tsc)
+        working-directory: ${{ env.WORKING_DIR }}
+        run: npm run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-dist
+          path: |
+            backend/dist/
+            backend/package.json
+            backend/package-lock.json
+            backend/prisma/
+          retention-days: 5
+
+# ════════════════════════════════════════════════════
+# JOB 3 — DEPLOY
+# Copia el artefacto a EC2 y reinicia la app con PM2
+# ════════════════════════════════════════════════════
+  deploy:
+    name: 🚀 Deploy to AWS EC2
+    runs-on: ubuntu-latest
+    needs: build         # solo se ejecuta si build pasa
+    if: github.ref == 'refs/heads/main' || github.event_name == 'push'
+
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-dist
+          path: artifact/
+
+      - name: Configure SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Copy artifact to EC2
+        run: |
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            artifact/ \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USER }}/app/
+
+      - name: Install production dependencies & restart with PM2
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+              -o StrictHostKeyChecking=no \
+              ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            set -e
+            cd /home/$USER/app
+
+            # Instala solo dependencias de producción
+            npm ci --omit=dev
+
+            # Genera el cliente Prisma en el servidor
+            npx prisma generate
+
+            # Reinicia (o inicia) la app con PM2
+            pm2 describe lti-backend > /dev/null 2>&1 \
+              && pm2 reload lti-backend --update-env \
+              || pm2 start dist/index.js --name lti-backend
+
+            # Persiste la configuración de PM2 entre reinicios
+            pm2 save
+          EOF
+
+      - name: Verify backend is healthy
+        run: |
+          sleep 5
+          ssh -i ~/.ssh/deploy_key \
+              -o StrictHostKeyChecking=no \
+              ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+              "curl -sf http://localhost:3010/ || (pm2 logs lti-backend --lines 20 && exit 1)"
