@@ -115,3 +115,45 @@ fichero llegó con toda la indentación desplazada a la derecha (YAML inválido)
 se reajustó la sangría a 2 espacios con las claves raíz sin indentar. Lección:
 en YAML la indentación es sintaxis, validar siempre con linter (extensión YAML
 de VS Code).
+
+## 3. Job de Deploy a EC2 vía AWS SSM
+
+**Objetivo:** añadir un job `deploy` que despliegue el backend en la EC2 usando
+AWS Systems Manager (SSM) Run Command, sin SSH, ejecutándose solo si el build pasa.
+
+**Prompt inicial (Goal / Return Format / Warnings / Context):**
+> GOAL
+> Añade un tercer job `deploy` al workflow que despliegue el backend en EC2 vía
+> AWS SSM Run Command, sin SSH.
+> [...]
+> WARNINGS
+> - needs: build. Autenticar con aws-actions/configure-aws-credentials@v4 leyendo
+>   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION.
+> - Desplegar con `aws ssm send-command` (DocumentName AWS-RunShellScript,
+>   InstanceIds = secret EC2_INSTANCE_ID) ejecutando: git pull + npm ci +
+>   prisma generate + npm run build + pm2 restart lti-backend.
+> - Tras enviar, ESPERAR y FALLAR si el estado final del comando SSM no es Success.
+> - El job no usa working-directory backend (sobreescribir a ".").
+> CONTEXT
+> - La EC2 ya tiene Node 20, git, PM2 y el repo clonado en
+>   /home/ssm-user/AI4Devs-pipeline; proceso PM2 = lti-backend. Región eu-north-1.
+
+**Prompt de ajuste (desplegar la rama del PR en vez de main):**
+> Ajusta solo el job deploy para que el git pull use la rama que disparó el PR
+> (${{ github.head_ref }}) en lugar de main: git fetch origin →
+> git checkout ${{ github.head_ref }} → git pull origin ${{ github.head_ref }}.
+
+**Validación:** generado correctamente. `needs: build` (cadena test→build→deploy),
+configure-aws-credentials@v4 con los secrets, `aws ssm send-command` bien formado,
+y paso de espera con polling cada 10s (máx 5 min) que distingue Success de
+Failed/Cancelled/TimedOut/Undeliverable e imprime StandardErrorContent al fallar.
+Resuelto el gotcha del working-directory (sobreescrito a "." en el job deploy).
+
+**Consideración de arquitectura (PR vs producción):**
+Por requisito explícito del ejercicio, el deploy se ejecuta en el evento
+`pull_request` y despliega la rama del PR (`github.head_ref`), que es coherente con
+el disparador. En un escenario de producción real, el despliegue NO se acoplaría al
+PR: el PR actuaría solo como *quality gate* (tests + build), y el deploy se
+dispararía al mergear a `main` mediante un trigger separado
+(`on: push: branches: [main]`), desplegando únicamente código ya revisado y
+aprobado. Se documenta esta diferencia de forma consciente.
