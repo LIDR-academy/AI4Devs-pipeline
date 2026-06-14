@@ -52,3 +52,40 @@ proyecto antes de generar el pipeline, para no repetir el contexto en cada promp
 Genera `CLAUDE.md` en la raíz con las secciones Commands, Architecture y CI/CD.
 Validado correctamente: detecta backend Node+TS+Prisma+Jest, build `npm run build`,
 te
+
+## 1. Trigger del workflow + Job de Tests
+
+**Objetivo:** crear `.github/workflows/pipeline.yml` con el trigger correcto
+(push a rama con PR abierto) y un job que ejecute los tests del backend, ya con
+buenas prácticas de legibilidad y robustez.
+
+**Prompt (estructura Goal / Return Format / Warnings / Requisitos de calidad / Context):**
+> GOAL
+> Crea un workflow de GitHub Actions en `.github/workflows/pipeline.yml` que se
+> dispare al hacer push de commits a una rama con un Pull Request abierto, y que
+> ejecute la suite de tests del backend.
+>
+> RETURN FORMAT
+> Un único fichero YAML `.github/workflows/pipeline.yml` con un solo job `test`.
+> No crees ni modifiques ningún otro fichero.
+>
+> WARNINGS
+> - El fichero DEBE llamarse `pipeline.yml`, no `ci.yml` (ignora el ci.yml vacío).
+> - Trigger: `pull_request` con tipos `[opened, synchronize, reopened]`
+>   (synchronize = push a rama con PR abierto). No usar `on: push`.
+> - Monorepo: ejecutar en `backend/` vía `defaults.run.working-directory`.
+> - Usar `npm ci` (no `npm install`). Fijar versiones de las actions.
+> - No añadir build ni deploy todavía.
+>
+> REQUISITOS DE CALIDAD
+> - `name` del workflow: "Backend CI/CD".
+> - Cada step con su `name` descriptivo (logs legibles).
+> - `timeout-minutes: 10` en el job.
+>
+> CONTEXT
+> - Backend Node + TS + Express + Prisma. Tests `npm test` (Jest), autocontenidos.
+>   Node LTS 20. Caché npm sobre backend/package-lock.json. Ver CLAUDE.md.
+
+**Validación:** generado correctamente en una sola pasada. Trigger, working-directory,
+npm ci, caché y versiones de actions correctos; `name` del workflow descriptivo,
+steps nombrados y timeout aplicados. Pendiente de validar en CI tras abrir el PR.
