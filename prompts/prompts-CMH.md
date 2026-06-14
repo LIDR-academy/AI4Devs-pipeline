@@ -89,3 +89,29 @@ buenas prácticas de legibilidad y robustez.
 **Validación:** generado correctamente en una sola pasada. Trigger, working-directory,
 npm ci, caché y versiones de actions correctos; `name` del workflow descriptivo,
 steps nombrados y timeout aplicados. Pendiente de validar en CI tras abrir el PR.
+
+## 2. Job de Build del backend
+
+**Objetivo:** añadir un job `build` que compile el backend y publique `dist/`
+como artifact para el deploy, ejecutándose solo si los tests pasan.
+
+**Prompt (Goal / Return Format / Warnings / Requisitos de calidad / Context):**
+> GOAL
+> Añade un segundo job `build` al workflow existente que compile el backend y
+> publique el resultado como artifact para un futuro job de deploy.
+> [... resto del prompt usado ...]
+> WARNINGS
+> - No modificar el job `test`. `build` depende de `test` vía `needs: test`.
+> - VM limpia: checkout + setup Node + `npm ci` propios antes de compilar.
+> - Compilar con `npm run build` (genera backend/dist/).
+> - Subir backend/dist con actions/upload-artifact@v4, nombre `backend-dist`.
+> REQUISITOS DE CALIDAD
+> - El `path` de upload-artifact se resuelve desde la raíz: usar `backend/dist`.
+
+**Validación:** lógica correcta — `needs: test` bien aplicado, job autónomo con
+su propio npm ci, build con `npm run build`, artifact `backend-dist` con
+`path: backend/dist` (gotcha de la ruta resuelto). Corrección posterior: el
+fichero llegó con toda la indentación desplazada a la derecha (YAML inválido);
+se reajustó la sangría a 2 espacios con las claves raíz sin indentar. Lección:
+en YAML la indentación es sintaxis, validar siempre con linter (extensión YAML
+de VS Code).
