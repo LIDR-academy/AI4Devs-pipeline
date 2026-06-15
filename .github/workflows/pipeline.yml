@@ -11,11 +11,16 @@ name: CI/CD Pipeline – Backend
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
 
 # Todos los pasos de npm corren dentro de backend/
 defaults:
   run:
     working-directory: backend
+
+permissions:
+  contents: read
 
 # ─────────────────────────────────────────────────────────────
 # JOB 1 – Tests del backend
@@ -28,6 +33,8 @@ jobs:
     steps:
       - name: Checkout del repositorio
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Configurar Node.js 20 con caché npm
         uses: actions/setup-node@v4
@@ -59,6 +66,8 @@ jobs:
     steps:
       - name: Checkout del repositorio
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Configurar Node.js 20 con caché npm
         uses: actions/setup-node@v4
@@ -79,14 +88,18 @@ jobs:
 
   # ─────────────────────────────────────────────────────────────
   # JOB 3 – Despliegue en EC2 vía SSH
-  # Solo se ejecuta si el job 'build' pasa.
-  # Estrategia: SSH → git pull en el servidor → reinstalar deps
+  # Solo se ejecuta en push a main (no en PRs).
+  # Estrategia: SSH → git checkout del commit testeado → reinstalar deps
   #             → prisma generate/migrate → build → reiniciar PM2.
   # ─────────────────────────────────────────────────────────────
   deploy:
     name: Despliegue en EC2
     runs-on: ubuntu-latest
     needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    concurrency:
+      group: backend-production-deploy
+      cancel-in-progress: false
 
     steps:
       - name: Desplegar en EC2 vía SSH
@@ -107,8 +120,10 @@ jobs:
 
             cd $APP_DIR
 
-            # Obtener el último código de la rama del PR
-            git pull
+            # Descargar cambios y verificar el commit exacto que pasó CI
+            git fetch --prune origin
+            git checkout --force "${{ github.sha }}"
+            git reset --hard "${{ github.sha }}"
 
             # Instalar solo dependencias de producción (ci = reproducible desde lockfile)
             npm ci --omit=dev
@@ -126,10 +141,3 @@ jobs:
             # SUPUESTO: el proceso PM2 se llama "backend".
             # TODO: ajustar el nombre del proceso al que se usó en 'pm2 start'.
             pm2 reload backend --update-env || pm2 restart backend
-
-        # Las variables AWS se pasan como env por si el script de despliegue
-        # necesita interactuar con la CLI de AWS (S3, SSM, etc.).
-        # No son estrictamente necesarias para el deploy por SSH.
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}

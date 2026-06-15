@@ -28,7 +28,7 @@ Este fichero documenta los prompts empleados para generar cada etapa del workflo
 >
 > Restricciones: versiones fijas en todas las actions; ningún secreto impreso en consola.
 
-**Resultado:** Steps del job `test` en `.github/workflows/pipeline.yml` (líneas 20–43).
+**Resultado:** Job `test` en `.github/workflows/pipeline.yml`.
 
 ---
 
@@ -51,7 +51,7 @@ Este fichero documenta los prompts empleados para generar cada etapa del workflo
 > Restricciones: mismas versiones de actions que el job anterior; working-directory heredado
 > del `defaults` del workflow.
 
-**Resultado:** Steps del job `build` en `.github/workflows/pipeline.yml` (líneas 46–70).
+**Resultado:** Job `build` en `.github/workflows/pipeline.yml`.
 
 ---
 
@@ -84,4 +84,4 @@ Este fichero documenta los prompts empleados para generar cada etapa del workflo
 > Restricciones: `set -e` al inicio del script remoto para abortar ante cualquier error;
 > ningún secreto visible en los logs del runner.
 
-**Resultado:** Steps del job `deploy` en `.github/workflows/pipeline.yml` (líneas 73–115).
+**Resultado:** Job `deploy` en `.github/workflows/pipeline.yml`.
