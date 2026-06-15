@@ -107,6 +107,13 @@ jobs:
             docker pull ${{ env.ECR_BACKEND }}:${{ needs.build-and-push.outputs.image-tag }}
             docker pull ${{ env.ECR_FRONTEND }}:${{ needs.build-and-push.outputs.image-tag }}
 
+            # Asegurar DB y red Docker antes de ejecutar migraciones
+            DB_USER=${{ secrets.DB_USER }} \
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+            DB_NAME=${{ secrets.DB_NAME }} \
+            FRONTEND_URL=${{ secrets.STAGING_FRONTEND_URL }} \
+            docker compose -f docker-compose.prod.yml up -d db
+
             # Ejecutar migraciones antes de reiniciar el backend
             docker run --rm \
               --network lti-app_lti-network \
