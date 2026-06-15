@@ -73,6 +73,9 @@ jobs:
           name: backend-build
           path: build
 
+      - name: List downloaded artifacts
+        run: ls -la build/ build/backend/ 2>&1
+
       - name: Copy artifacts to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -80,10 +83,10 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           source: |
-            build/dist
-            build/package.json
-            build/package-lock.json
-            build/prisma
+            build/backend/dist
+            build/backend/package.json
+            build/backend/package-lock.json
+            build/backend/prisma
           target: "/home/${{ secrets.EC2_USER }}/app"
 
       - name: Install deps and restart on EC2
