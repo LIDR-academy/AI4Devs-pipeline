@@ -20,6 +20,7 @@
 - [16. Que mirar si algo falla](#16-que-mirar-si-algo-falla)
 - [17. Que quedo pendiente o mejorable](#17-que-quedo-pendiente-o-mejorable)
 - [18. Resumen ultra corto](#18-resumen-ultra-corto)
+- [19. CI Pipeline explicado para dummies](#19-ci-pipeline-explicado-para-dummies)
 
 ## 1. Para qué sirve todo esto
 
@@ -1337,4 +1338,210 @@ El resultado:
 
 ```text
 Aplicación full-stack desplegada en AWS staging con CI/CD.
+```
+
+## 19. CI Pipeline explicado para dummies
+
+Después de conseguir que el despliegue de staging funcionara, apareció otro tema: el workflow `CI Pipeline`.
+
+Es importante distinguir dos conceptos:
+
+```text
+CI = Continuous Integration
+CD = Continuous Deployment / Delivery
+```
+
+En este proyecto:
+
+```text
+CI Pipeline
+  Comprueba que el código está sano.
+
+CD — Staging
+  Despliega la aplicación en AWS.
+```
+
+### 19.1 Por qué se lanzaba CI si estábamos mirando CD
+
+El workflow de CI estaba configurado así:
+
+```yaml
+on:
+  push:
+    branches: ['**']
+```
+
+Eso significa:
+
+```text
+Ejecuta CI en cualquier push a cualquier rama.
+```
+
+Por eso, al hacer push a `main`, se lanzaban dos workflows:
+
+```text
+CI Pipeline
+CD — Staging
+```
+
+Uno valida el código. El otro despliega.
+
+### 19.2 Qué valida CI
+
+CI revisa cosas como:
+
+| Validación | Qué significa |
+|---|---|
+| Type check | TypeScript compila a nivel de tipos |
+| Lint | El código cumple reglas de estilo/calidad |
+| Tests | Se ejecutan pruebas automáticas |
+| Build | La app se puede construir |
+| Audit | No hay vulnerabilidades altas en dependencias relevantes |
+
+### 19.3 Problema con ESLint 9
+
+ESLint es una herramienta que revisa calidad de código.
+
+El workflow tenía este comando:
+
+```bash
+npx eslint src --ext .ts
+```
+
+Ese comando era válido en versiones anteriores, pero con ESLint 9 ya no.
+
+Se cambió a:
+
+```bash
+npx eslint "src/**/*.ts"
+```
+
+Después apareció otro problema:
+
+```text
+ESLint couldn't find an eslint.config.js file.
+```
+
+Esto pasó porque ESLint 9 usa un formato nuevo de configuración llamado flat config.
+
+Solución:
+
+```text
+Crear backend/eslint.config.js
+```
+
+La idea fue no endurecer de golpe las reglas. Primero se dejó CI funcionando con una configuración prudente.
+
+### 19.4 Problema con tests frontend
+
+El frontend tenía este script:
+
+```json
+"test": "jest --config jest.config.js"
+```
+
+Pero no existía:
+
+```text
+frontend/jest.config.js
+```
+
+Por eso fallaba.
+
+Como el frontend usa Create React App, se cambió a:
+
+```json
+"test": "react-scripts test --passWithNoTests"
+```
+
+`--passWithNoTests` significa:
+
+```text
+Si todavía no hay tests unitarios, no falles solo por eso.
+```
+
+Esto es aceptable temporalmente, pero a futuro conviene añadir tests reales.
+
+### 19.5 Problema con npm audit
+
+`npm audit` revisa vulnerabilidades en dependencias.
+
+En backend tiene sentido auditar todo con:
+
+```bash
+npm audit --audit-level=high
+```
+
+Porque el backend Node corre en producción.
+
+En frontend la situación es distinta:
+
+```text
+El usuario no ejecuta react-scripts.
+El usuario no ejecuta webpack dev server.
+El usuario no ejecuta Babel.
+El usuario recibe archivos estáticos servidos por nginx.
+```
+
+Por eso se movió `react-scripts` a `devDependencies` y se cambió el audit frontend a:
+
+```bash
+npm audit --audit-level=high --omit=dev
+```
+
+Traducción:
+
+```text
+Audita dependencias de runtime, no herramientas de desarrollo.
+```
+
+### 19.6 Warnings de Node.js 20 en GitHub Actions
+
+GitHub mostró un warning:
+
+```text
+Node.js 20 actions are deprecated.
+```
+
+No es un error de la app. Significa que algunas actions, como `actions/checkout` o `actions/setup-node`, usan internamente Node.js 20.
+
+GitHub avisó de que más adelante usará Node.js 24.
+
+Opciones:
+
+| Opción | Ventaja | Riesgo |
+|---|---|---|
+| No tocar todavía | No introduces cambios nuevos | El aviso sigue y puede fallar en el futuro |
+| Actualizar actions | Limpia warnings | Puede haber cambios de comportamiento |
+| Forzar Node 24 ahora | Te adelantas al cambio | Puede aparecer un fallo nuevo |
+
+Una forma de probar Node 24 sería:
+
+```yaml
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+```
+
+Recomendación:
+
+```text
+Hacerlo en un commit separado y no mezclarlo con cambios de despliegue.
+```
+
+### 19.7 Qué quedó conseguido en CI
+
+Después de los ajustes:
+
+```text
+Backend lint pasa.
+Frontend test script ya no busca un config inexistente.
+Backend audit no bloquea por vulnerabilidades high.
+Frontend audit revisa runtime y pasa.
+El pipeline queda verde.
+```
+
+La lección principal:
+
+```text
+CI y CD son capas distintas. Primero conseguimos desplegar; después limpiamos los checks de calidad para dejar el repo sano.
 ```

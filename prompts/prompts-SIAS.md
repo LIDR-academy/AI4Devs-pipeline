@@ -342,6 +342,131 @@ puede verificar en AWS/GitHub (Secrets, ECR repos, EC2 con Docker, Instance Prof
 
 ---
 
+## 9. Prompt mejorado — Plantilla para proyectos similares
+
+**Modo:** Ask / Plan
+**Modelo:** Claude Sonnet 4.6 (o superior)
+**Herramienta:** Codex, Claude Code o cualquier LLM con acceso al repositorio
+
+> Este prompt es una versión refinada del prompt inicial, elaborada una vez completada toda la
+> tarea. Incorpora las lecciones aprendidas durante la implementación real: problemas con Prisma
+> en Alpine, hardcoding de `localhost` en el frontend, separación de permisos IAM, auditoría de
+> dependencias runtime vs devDependencies, y la necesidad de auditar el repo antes de generar
+> cualquier configuración. Puede usarse como plantilla de partida para proyectos full-stack
+> similares con la misma arquitectura (Node.js + React + PostgreSQL + Docker + AWS EC2).
+
+```text
+Quiero desplegar el proyecto AI4Devs-pipeline en AWS staging usando GitHub Actions, ECR, EC2,
+Docker Compose y GitHub Secrets.
+
+Antes de tocar nada, audita el repositorio:
+- Estructura de carpetas.
+- Dockerfiles de backend y frontend.
+- docker-compose.prod.yml.
+- Workflows existentes en .github/workflows.
+- Variables de entorno necesarias.
+- Uso de Prisma, PostgreSQL, nginx y frontend API URLs.
+
+Después propón y ejecuta un plan paso a paso, explicando cada decisión:
+
+1. AWS IAM
+- Crear o validar un usuario IAM para GitHub Actions sin acceso a consola.
+- Darle solo permisos mínimos para hacer push a ECR.
+- Indicar exactamente qué Access Key hay que guardar en GitHub Secrets.
+
+2. AWS ECR
+- Crear o validar repositorios privados:
+  - lti-backend
+  - lti-frontend
+- Confirmar región y account ID.
+
+3. AWS EC2
+- Crear o validar una instancia EC2 para staging.
+- Recomendar AMI, tipo de instancia y storage.
+- Configurar Security Group con:
+  - 80 abierto a Internet.
+  - 443 abierto a Internet.
+  - 22 restringido de forma segura.
+- Crear o validar un IAM Role / Instance Profile con permisos de pull desde ECR.
+
+4. Preparación de EC2
+- Conectar por SSH.
+- Instalar Docker, Docker Compose y AWS CLI.
+- Crear /opt/lti-app.
+- Copiar docker-compose.prod.yml.
+- Crear .env en EC2 sin exponer secretos en el repo.
+
+5. GitHub Secrets
+- Dar una tabla exacta de secrets necesarios:
+  - AWS_ACCESS_KEY_ID
+  - AWS_SECRET_ACCESS_KEY
+  - AWS_REGION
+  - AWS_ACCOUNT_ID
+  - EC2_HOST_STAGING
+  - EC2_USER
+  - EC2_SSH_KEY
+  - DB_USER
+  - DB_PASSWORD
+  - DB_NAME
+  - DATABASE_URL
+  - STAGING_API_URL
+  - STAGING_FRONTEND_URL
+- Explicar el valor esperado de cada uno sin revelar credenciales.
+
+6. Revisión de código y configuración
+- Ajustar Dockerfile del backend si Prisma necesita dependencias de producción.
+- Verificar schema.prisma y binaryTargets para la imagen Docker usada.
+- Verificar que el frontend no hardcodea localhost.
+- Usar REACT_APP_API_URL.
+- Usar nginx como proxy /api hacia backend.
+- Revisar docker-compose.prod.yml para no exponer puertos innecesarios.
+
+7. GitHub Actions
+- Crear o corregir el workflow de staging para:
+  - Build backend.
+  - Build frontend con REACT_APP_API_URL.
+  - Push a ECR.
+  - SSH a EC2.
+  - Login a ECR desde EC2 usando Instance Profile.
+  - Pull de imágenes.
+  - Levantar DB.
+  - Ejecutar prisma migrate deploy.
+  - Levantar backend y frontend.
+  - Ejecutar health check.
+  - Ejecutar E2E si existen.
+
+8. Troubleshooting
+- Si falla, analizar logs por capas:
+  - IAM.
+  - ECR.
+  - SSH.
+  - Docker.
+  - Prisma.
+  - nginx.
+  - frontend.
+  - health check.
+- Proponer correcciones mínimas y volver a probar.
+
+9. Seguridad final
+- Cerrar SSH si se abrió temporalmente.
+- Recomendar SSM o alternativa segura para futuros deploys.
+- No guardar secretos en el repo.
+
+10. Validación final
+- Confirmar que el pipeline pasa.
+- Confirmar que ECR tiene imágenes.
+- Confirmar que EC2 tiene contenedores corriendo.
+- Confirmar que frontend responde.
+- Confirmar que /api/health responde.
+- Documentar todo lo realizado en docs/despliegue-staging-aws-github-actions.md.
+
+Explícame todo en español, de forma didáctica, para una persona técnica que no controla mucho de
+DevOps. Usa tablas y comandos, indicando siempre si se ejecutan en PowerShell local, en EC2 por
+SSH, en AWS Console o en GitHub UI.
+```
+
+---
+
 ## Resumen de archivos generados
 
 | Archivo                               | Tipo de cambio          |
