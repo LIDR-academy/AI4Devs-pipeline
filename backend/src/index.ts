@@ -31,9 +31,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// Middleware para permitir CORS desde http://localhost:3000
+// Middleware para permitir CORS — configurable via FRONTEND_URL en producción
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true
 }));
 
@@ -51,7 +51,11 @@ app.use((req, res, next) => {
   next();
 });
 
-const port = 3010;
+const port = parseInt(process.env.PORT || '3010', 10);
+
+app.get('/health', (_req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 
 app.get('/', (req, res) => {
   res.send('Hola LTI!');
