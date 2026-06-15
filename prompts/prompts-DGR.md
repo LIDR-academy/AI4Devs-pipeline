@@ -258,3 +258,43 @@ Estrategia híbrida: el **build se valida en CI** (requisito del ejercicio) y el
 - **Crear**: [`.github/workflows/pipeline.yml`](.github/workflows/pipeline.yml) — workflow completo
 - **Sin cambios de código** en backend/frontend para cumplir el ejercicio mínimo
 - **Opcional posterior**: corregir URLs hardcodeadas del frontend y CORS para exposición pública vía Nginx (no requerido por este prompt)
+
+
+# Resultado obtenido
+
+Plan implementado. Resumen de lo hecho:
+
+Completado
+1. EC2 preparada (16.171.234.181)
+Docker + PostgreSQL con docker-compose
+Repo clonado en ~/AI4Devs-pipeline
+Backend migrado, con seed y .env
+PM2 con lti-backend en puerto 3010
+Verificado: curl http://localhost:3010/ → Hola LTI!
+2. Workflow creado
+Archivo: .github/workflows/pipeline.yml
+
+Job	Acción
+test
+npm ci → prisma generate → npm test
+build
+npm run build → sube artifact backend-dist
+deploy
+SCP del build + SSH a EC2 → git pull → pm2 restart
+Trigger: pull_request (opened, synchronize, reopened)
+
+3. Secretos configurados en GitHub
+EC2_INSTANCE, EC2_USER, EC2_SSH_PRIVATE_KEY
+AWS_ACCESS_ID, AWS_ACCESS_KEY (según README del curso)
+4. PR de prueba abierto y pipeline en verde
+PR: https://github.com/danigrz/AI4Devs-pipeline/pull/1
+Run exitoso: https://github.com/danigrz/AI4Devs-pipeline/actions/runs/27574710739
+Los 3 jobs pasaron: Backend Tests, Backend Build, Deploy to EC2
+5. Otros cambios
+Script npm run seed en backend/package.json
+*.pem añadido a .gitignore
+Rama actual
+Estás en feature/pipeline. Para entregar el ejercicio puedes mergear el PR #1 a main.
+
+Nota
+El primer deploy falló porque curl se ejecutaba antes de que PM2 levantara el servidor; se corrigió con sleep 5 antes del health check.
