@@ -133,7 +133,7 @@ jobs:
             # Health check post-deploy (espera máximo 60s)
             for i in $(seq 1 6); do
               sleep 10
-              if curl --silent --fail http://localhost:3010/health; then
+              if curl --silent --fail http://localhost/api/health; then
                 echo "Health check OK"
                 exit 0
               fi
