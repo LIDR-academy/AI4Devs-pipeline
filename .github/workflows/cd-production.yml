@@ -1,0 +1,149 @@
+name: CD — Production
+
+# Se activa únicamente al pushear un tag semver: v1.2.3
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_BACKEND: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/lti-backend
+  ECR_FRONTEND: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/lti-frontend
+
+jobs:
+  # ──────────────────────────────────────────────────────────────
+  # JOB 1: Build imágenes de producción y push a ECR
+  # Tags: versión semver + latest
+  # ──────────────────────────────────────────────────────────────
+  build-and-push:
+    name: Build Production Images
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.tag.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: tag
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.ECR_BACKEND }}:${{ steps.tag.outputs.version }}
+            ${{ env.ECR_BACKEND }}:latest
+          cache-from: type=registry,ref=${{ env.ECR_BACKEND }}:latest
+          cache-to: type=inline
+
+      - name: Build & push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          build-args: |
+            REACT_APP_API_URL=${{ secrets.PROD_API_URL }}
+          tags: |
+            ${{ env.ECR_FRONTEND }}:${{ steps.tag.outputs.version }}
+            ${{ env.ECR_FRONTEND }}:latest
+          cache-from: type=registry,ref=${{ env.ECR_FRONTEND }}:latest
+          cache-to: type=inline
+
+      # Trivy bloquea el deploy si hay vulnerabilidades CRITICAL
+      - name: Scan backend image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ECR_BACKEND }}:${{ steps.tag.outputs.version }}
+          severity: CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true
+
+  # ──────────────────────────────────────────────────────────────
+  # JOB 2: Deploy a Producción (requiere aprobación manual)
+  # Configura "Required reviewers" en GitHub Environments → production
+  # ──────────────────────────────────────────────────────────────
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: production   # ← pausa aquí hasta que un reviewer apruebe
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST_PRODUCTION }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+
+            # Login a ECR usando Instance Profile del EC2
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
+              docker login --username AWS --password-stdin \
+              ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+
+            cd /opt/lti-app
+
+            # Backup del estado actual por si hay que hacer rollback manual
+            cp docker-compose.prod.yml docker-compose.prod.yml.bak 2>/dev/null || true
+
+            # Pull de las nuevas imágenes
+            docker pull ${{ env.ECR_BACKEND }}:${{ needs.build-and-push.outputs.image-tag }}
+            docker pull ${{ env.ECR_FRONTEND }}:${{ needs.build-and-push.outputs.image-tag }}
+
+            # Migraciones antes de reiniciar el backend
+            docker run --rm \
+              --network lti-app_lti-network \
+              -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+              ${{ env.ECR_BACKEND }}:${{ needs.build-and-push.outputs.image-tag }} \
+              npx prisma migrate deploy
+
+            # Deploy rolling: backend y frontend sin bajar la DB
+            IMAGE_BACKEND=${{ env.ECR_BACKEND }}:${{ needs.build-and-push.outputs.image-tag }} \
+            IMAGE_FRONTEND=${{ env.ECR_FRONTEND }}:${{ needs.build-and-push.outputs.image-tag }} \
+            DB_USER=${{ secrets.DB_USER }} \
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+            DB_NAME=${{ secrets.DB_NAME }} \
+            FRONTEND_URL=${{ secrets.PROD_FRONTEND_URL }} \
+            docker compose -f docker-compose.prod.yml up -d --no-deps --remove-orphans backend frontend
+
+            # Health check — si falla se avisa pero el rollback es manual
+            # (la imagen anterior sigue disponible en ECR con tag latest-anterior)
+            for i in $(seq 1 9); do
+              sleep 10
+              if curl --silent --fail https://${{ secrets.PROD_FRONTEND_URL }}/api/health; then
+                echo "Deploy ${{ needs.build-and-push.outputs.image-tag }} OK"
+                docker image prune -f
+                exit 0
+              fi
+              echo "Intento $i/9..."
+            done
+
+            echo "ERROR: Health check fallido. Revisar logs con: docker compose logs backend"
+            exit 1

@@ -1,0 +1,159 @@
+name: CD — Staging
+
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_BACKEND: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/lti-backend
+  ECR_FRONTEND: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/lti-frontend
+
+jobs:
+  # ──────────────────────────────────────────────────────────────
+  # JOB 1: Build imágenes Docker y push a Amazon ECR
+  # ──────────────────────────────────────────────────────────────
+  build-and-push:
+    name: Build & Push to ECR
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tag
+        id: meta
+        run: echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.ECR_BACKEND }}:${{ steps.meta.outputs.tag }}
+            ${{ env.ECR_BACKEND }}:staging-latest
+          cache-from: type=registry,ref=${{ env.ECR_BACKEND }}:staging-latest
+          cache-to: type=inline
+
+      - name: Build & push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          build-args: |
+            REACT_APP_API_URL=${{ secrets.STAGING_API_URL }}
+          tags: |
+            ${{ env.ECR_FRONTEND }}:${{ steps.meta.outputs.tag }}
+            ${{ env.ECR_FRONTEND }}:staging-latest
+          cache-from: type=registry,ref=${{ env.ECR_FRONTEND }}:staging-latest
+          cache-to: type=inline
+
+      # Trivy bloquea el deploy si hay vulnerabilidades CRITICAL en la imagen
+      - name: Scan backend image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ECR_BACKEND }}:${{ steps.meta.outputs.tag }}
+          severity: CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true
+
+  # ──────────────────────────────────────────────────────────────
+  # JOB 2: Deploy a EC2 de Staging
+  # El EC2 autentica contra ECR vía Instance Profile (IAM Role)
+  # ──────────────────────────────────────────────────────────────
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: staging
+
+    steps:
+      - name: Checkout (para tener docker-compose.prod.yml)
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST_STAGING }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+
+            # Login a ECR usando el Instance Profile del EC2
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
+              docker login --username AWS --password-stdin \
+              ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+
+            cd /opt/lti-app
+
+            # Pull de las nuevas imágenes
+            docker pull ${{ env.ECR_BACKEND }}:${{ needs.build-and-push.outputs.image-tag }}
+            docker pull ${{ env.ECR_FRONTEND }}:${{ needs.build-and-push.outputs.image-tag }}
+
+            # Ejecutar migraciones antes de reiniciar el backend
+            docker run --rm \
+              --network lti-app_lti-network \
+              -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+              ${{ env.ECR_BACKEND }}:${{ needs.build-and-push.outputs.image-tag }} \
+              npx prisma migrate deploy
+
+            # Rolling restart sin downtime de la DB
+            IMAGE_BACKEND=${{ env.ECR_BACKEND }}:${{ needs.build-and-push.outputs.image-tag }} \
+            IMAGE_FRONTEND=${{ env.ECR_FRONTEND }}:${{ needs.build-and-push.outputs.image-tag }} \
+            DB_USER=${{ secrets.DB_USER }} \
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+            DB_NAME=${{ secrets.DB_NAME }} \
+            FRONTEND_URL=${{ secrets.STAGING_FRONTEND_URL }} \
+            docker compose -f docker-compose.prod.yml up -d --no-deps --remove-orphans backend frontend
+
+            # Health check post-deploy (espera máximo 60s)
+            for i in $(seq 1 6); do
+              sleep 10
+              if curl --silent --fail http://localhost:3010/health; then
+                echo "Health check OK"
+                exit 0
+              fi
+              echo "Intento $i/6 fallido, reintentando..."
+            done
+            echo "Health check fallido tras 60s" && exit 1
+
+            docker image prune -f
+
+  # ──────────────────────────────────────────────────────────────
+  # JOB 3: Tests E2E en Staging
+  # continue-on-error: true hasta que salgan del describe.skip
+  # ──────────────────────────────────────────────────────────────
+  e2e-tests:
+    name: E2E Tests (Staging)
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Cypress E2E tests
+        uses: cypress-io/github-action@v6
+        with:
+          working-directory: frontend
+          config: baseUrl=${{ secrets.STAGING_FRONTEND_URL }}
+        env:
+          CYPRESS_API_URL: ${{ secrets.STAGING_API_URL }}

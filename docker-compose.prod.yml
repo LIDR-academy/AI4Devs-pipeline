@@ -1,0 +1,45 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - lti-network
+    # La DB no expone puerto al host en producción
+
+  backend:
+    image: ${IMAGE_BACKEND:-ghcr.io/placeholder/lti-backend:latest}
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      FRONTEND_URL: ${FRONTEND_URL}
+      PORT: 3010
+    networks:
+      - lti-network
+
+  frontend:
+    image: ${IMAGE_FRONTEND:-ghcr.io/placeholder/lti-frontend:latest}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - lti-network
+
+volumes:
+  postgres_data:
+
+networks:
+  lti-network:
+    driver: bridge
