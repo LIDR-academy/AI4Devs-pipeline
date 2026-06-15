@@ -1,0 +1,135 @@
+name: CI/CD Pipeline – Backend
+
+# Trigger: pull_request con types [opened, synchronize, reopened]
+#
+# Por qué esto equivale a "push a una rama con un PR abierto":
+#   - 'opened'      → se abre un PR (incluye el commit inicial de la rama).
+#   - 'synchronize' → se hace push a la rama de un PR ya abierto (el caso principal).
+#   - 'reopened'    → se reabre un PR cerrado y la rama ya tiene commits.
+# De este modo el pipeline se ejecuta exactamente cuando hay actividad de commits
+# sobre una rama que tiene un Pull Request abierto, sin dispararse en ramas sin PR.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# Todos los pasos de npm corren dentro de backend/
+defaults:
+  run:
+    working-directory: backend
+
+# ─────────────────────────────────────────────────────────────
+# JOB 1 – Tests del backend
+# ─────────────────────────────────────────────────────────────
+jobs:
+  test:
+    name: Tests del backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js 20 con caché npm
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      # Prisma genera @prisma/client a partir del schema; necesario
+      # para que los tipos TypeScript resuelvan correctamente en los tests.
+      - name: Generar cliente Prisma
+        run: npx prisma generate
+
+      - name: Ejecutar tests
+        run: npm test
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 2 – Build del backend
+  # Solo se ejecuta si el job 'test' pasa.
+  # ─────────────────────────────────────────────────────────────
+  build:
+    name: Build del backend
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js 20 con caché npm
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Generar cliente Prisma
+        run: npx prisma generate
+
+      # 'tsc' compila TypeScript a JavaScript en la carpeta dist/
+      - name: Compilar TypeScript (build)
+        run: npm run build
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 3 – Despliegue en EC2 vía SSH
+  # Solo se ejecuta si el job 'build' pasa.
+  # Estrategia: SSH → git pull en el servidor → reinstalar deps
+  #             → prisma generate/migrate → build → reiniciar PM2.
+  # ─────────────────────────────────────────────────────────────
+  deploy:
+    name: Despliegue en EC2
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Desplegar en EC2 vía SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_INSTANCE }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          # StrictHostKeyChecking=no evita el prompt interactivo de host desconocido
+          # en runners efímeros. Alternativa más segura: añadir el fingerprint del host
+          # como secreto y cargarlo en known_hosts antes del SSH.
+          script: |
+            set -e
+
+            # SUPUESTO: la app está clonada en ~/app/backend dentro del EC2.
+            # TODO: ajustar APP_DIR a la ruta real del proyecto en el servidor.
+            APP_DIR=~/app/backend
+
+            cd $APP_DIR
+
+            # Obtener el último código de la rama del PR
+            git pull
+
+            # Instalar solo dependencias de producción (ci = reproducible desde lockfile)
+            npm ci --omit=dev
+
+            # Regenerar cliente Prisma con el schema actualizado
+            npx prisma generate
+
+            # Aplicar migraciones pendientes en la base de datos de producción
+            npx prisma migrate deploy
+
+            # Recompilar TypeScript a dist/
+            npm run build
+
+            # Reiniciar el proceso con PM2
+            # SUPUESTO: el proceso PM2 se llama "backend".
+            # TODO: ajustar el nombre del proceso al que se usó en 'pm2 start'.
+            pm2 reload backend --update-env || pm2 restart backend
+
+        # Las variables AWS se pasan como env por si el script de despliegue
+        # necesita interactuar con la CLI de AWS (S3, SSM, etc.).
+        # No son estrictamente necesarias para el deploy por SSH.
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
