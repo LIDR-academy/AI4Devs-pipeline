@@ -44,4 +44,6 @@ El workflow se dispara con un `pull_request` sobre `main` (tipos `opened`, `sync
 >
 > Prerrequisitos en la EC2 que NO ejecuta el workflow y deben estar hechos a mano: Node 20 LTS, PM2 global (`npm i -g pm2`), `pm2 startup` configurado, security group con el puerto `3010` abierto (puerto del backend, ver `backend/src/index.ts`) y `22` accesible desde las IPs de GitHub Actions.
 >
+> Importante: usa `source:` en **una sola línea con comas** (no multi-línea con `|`), porque `appleboy/scp-action@v0.1.7` usa `drone-scp` v1.6.14 internamente y no parsea correctamente los valores multi-línea del YAML, produciendo `tar: empty archive`. Formato correcto: `source: "build/dist,build/package.json,build/package-lock.json,build/prisma"`.
+>
 > Devuélveme el bloque YAML del job `deploy`.
