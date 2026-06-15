@@ -110,4 +110,5 @@ jobs:
             npx prisma@5.13.0 migrate deploy
             pm2 restart lti-backend || pm2 start dist/index.js --name lti-backend
             pm2 save
+            sleep 5
             curl -f http://localhost:3010/
