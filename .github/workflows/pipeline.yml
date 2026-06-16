@@ -1,0 +1,156 @@
+# Pipeline de CI/CD del backend (LTI)
+#
+# Objetivo del ejercicio:
+#   1) Pasar los tests del backend
+#   2) Generar el build del backend
+#   3) Desplegar el backend en una instancia EC2
+#
+# Disparador: "push a una rama con un Pull Request abierto".
+#   El evento `pull_request` con el tipo `synchronize` se dispara exactamente
+#   cuando se hace push de nuevos commits a la rama de un PR que ya está abierto.
+#   `opened` cubre el push inicial que abre el PR y `reopened` si se reabre.
+name: Backend CI/CD Pipeline
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    # Sin filtro de `branches:` para que funcione con PRs hacia cualquier rama base.
+    # Si solo quieres PRs hacia main, descomenta:
+    # branches: [ main ]
+
+# Evita ejecuciones solapadas sobre la misma rama del PR: si llega un push nuevo,
+# cancela la ejecución anterior que siga en curso.
+concurrency:
+  group: pipeline-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "18"
+  # Todos los comandos del backend se ejecutan dentro de la carpeta backend/.
+  WORKING_DIR: backend
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1) TESTS DEL BACKEND
+  # ---------------------------------------------------------------------------
+  test:
+    name: Tests del backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      # Los tests importan `@prisma/client`, así que el cliente debe estar generado.
+      # Los tests mockean Prisma, por lo que NO hace falta una base de datos real.
+      - name: Generar el cliente de Prisma
+        run: npx prisma generate
+
+      - name: Ejecutar tests (Jest)
+        run: npm test
+
+  # ---------------------------------------------------------------------------
+  # 2) BUILD DEL BACKEND
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build del backend
+    needs: test # Solo se construye si los tests pasaron
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Generar el cliente de Prisma
+        run: npx prisma generate
+
+      # `npm run build` ejecuta `tsc` y compila el TypeScript a la carpeta dist/.
+      - name: Compilar el backend (tsc -> dist/)
+        run: npm run build
+
+      # Empaquetamos solo lo necesario para ejecutar en producción y lo subimos
+      # como artefacto, para que el job de deploy lo reutilice sin recompilar.
+      - name: Preparar paquete de despliegue
+        run: |
+          mkdir -p ../deploy
+          cp -r dist ../deploy/
+          cp package.json package-lock.json ../deploy/
+          cp -r prisma ../deploy/
+
+      - name: Subir artefacto del build
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-build
+          path: deploy
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # 3) DESPLIEGUE EN EC2
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Desplegar backend en EC2
+    needs: build # Solo se despliega si el build fue correcto
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar artefacto del build
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-build
+          path: deploy
+
+      # Copia el paquete (dist/, package.json, package-lock.json, prisma/) a EC2.
+      # `strip_components: 1` elimina el prefijo "deploy/" para que los archivos
+      # queden directamente dentro de ~/lti-backend en el servidor.
+      - name: Copiar archivos a EC2 (SCP)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "deploy/*"
+          target: "~/lti-backend"
+          strip_components: 1
+
+      # Conecta por SSH y deja la aplicación corriendo con PM2.
+      # Requisitos previos en la instancia EC2 (ver README):
+      #   - Node.js y npm instalados
+      #   - PM2 instalado globalmente (npm i -g pm2)
+      #   - Un archivo ~/lti-backend/.env con la variable DATABASE_URL
+      - name: Instalar, migrar y (re)iniciar con PM2 en EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            cd ~/lti-backend
+            npm ci
+            npx prisma generate
+            npx prisma migrate deploy
+            pm2 restart lti-backend || pm2 start dist/index.js --name lti-backend
+            pm2 save
