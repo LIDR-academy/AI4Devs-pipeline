@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { Education } from './Education';
 import { WorkExperience } from './WorkExperience';
 import { Resume } from './Resume';
@@ -44,25 +44,33 @@ export class Candidate {
         // Añadir educations si hay alguna para añadir
         if (this.educations.length > 0) {
             candidateData.educations = {
-                create: this.educations.map(edu => ({
-                    institution: edu.institution,
-                    title: edu.title,
-                    startDate: edu.startDate,
-                    endDate: edu.endDate
-                }))
+                create: this.educations.map(edu => {
+                    const startDate = edu.startDate ? new Date(edu.startDate) : undefined;
+                    const endDate = edu.endDate ? new Date(edu.endDate) : undefined;
+                    return {
+                        institution: edu.institution,
+                        title: edu.title,
+                        startDate,
+                        endDate
+                    };
+                })
             };
         }
 
         // Añadir workExperiences si hay alguna para añadir
         if (this.workExperiences.length > 0) {
             candidateData.workExperiences = {
-                create: this.workExperiences.map(exp => ({
-                    company: exp.company,
-                    position: exp.position,
-                    description: exp.description,
-                    startDate: exp.startDate,
-                    endDate: exp.endDate
-                }))
+                create: this.workExperiences.map(exp => {
+                    const startDate = exp.startDate ? new Date(exp.startDate) : undefined;
+                    const endDate = exp.endDate ? new Date(exp.endDate) : undefined;
+                    return {
+                        company: exp.company,
+                        position: exp.position,
+                        description: exp.description,
+                        startDate,
+                        endDate
+                    };
+                })
             };
         }
 
@@ -98,10 +106,10 @@ export class Candidate {
                 });
             } catch (error: any) {
                 console.log(error);
-                if (error instanceof Prisma.PrismaClientInitializationError) {
+                if ((error as any).code === 'P2003') {
                     // Database connection error
                     throw new Error('No se pudo conectar con la base de datos. Por favor, asegúrese de que el servidor de base de datos esté en ejecución.');
-                } else if (error.code === 'P2025') {
+                } else if ((error as any).code === 'P2025') {
                     // Record not found error
                     throw new Error('No se pudo encontrar el registro del candidato con el ID proporcionado.');
                 } else {
@@ -116,7 +124,7 @@ export class Candidate {
                 });
                 return result;
             } catch (error: any) {
-                if (error instanceof Prisma.PrismaClientInitializationError) {
+                if ((error as any).code === 'P2003') {
                     // Database connection error
                     throw new Error('No se pudo conectar con la base de datos. Por favor, asegúrese de que el servidor de base de datos esté en ejecución.');
                 } else {

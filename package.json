@@ -6,5 +6,7 @@
     "schema": "backend/prisma/schema.prisma"
   },
   "devDependencies": {
+    "prisma": "^7.9.1",
+    "ts-node": "^10.9.2"
   }
 }

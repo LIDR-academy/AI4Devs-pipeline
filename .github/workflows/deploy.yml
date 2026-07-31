@@ -1,0 +1,92 @@
+name: Deploy to AWS EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      # -- debug secrets
+      # - name: Debug secrets
+      #   run: |
+      #     echo "Host: [${{ secrets.EC2_INSTANCE }}]"
+      #     echo "User: [${{ secrets.AWS_ACCESS_ID }}]"
+      #     # NO imprimas la clave privada por seguridad
+      # ── Validación: build en el runner antes de deployar ──
+      - name: Install backend dependencies
+        working-directory: ./backend
+        run: npm ci
+
+      - name: Generate Prisma Client
+        working-directory: ./backend
+        run: npx prisma generate
+
+      - name: Build backend
+        working-directory: ./backend
+        run: npm run build
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: ./frontend
+        run: npm run build
+
+      # ── Deploy vía SSH a EC2 ──
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_INSTANCE }}
+          username: ${{ secrets.AWS_ACCESS_ID }}
+          key: ${{ secrets.AWS_ACCESS_KEY }}
+          script: |
+            # Navegar al directorio del proyecto (ajusta la ruta si tu carpeta se llama distinto)
+            cd ~/lti/AI4Devs-pipeline
+            echo "Deploying en: $(pwd)"
+
+            # Actualizar código fuente
+            git fetch origin
+            git reset --hard origin/main
+
+            # ── Backend ──
+            cd backend
+            npm ci
+            npx prisma generate
+            npx prisma migrate deploy
+            npm run build
+
+            # ── Frontend ──
+            cd ../frontend
+            npm ci
+            npm run build
+
+            # ── Reiniciar servicios con PM2 ──
+            cd ../backend
+            pm2 delete lti-backend 2>/dev/null || true
+            pm2 start dist/index.js --name lti-backend
+
+            # Si sirves el frontend estático directamente con PM2, descomenta:
+            # cd ../frontend
+            # pm2 delete lti-frontend 2>/dev/null || true
+            # pm2 serve build 3000 --name lti-frontend --spa
+
+            pm2 save
+
+            echo "Deploy completado exitosamente"

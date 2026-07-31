@@ -3,7 +3,7 @@ import { Position } from '../../domain/models/Position';
 
 const prisma = new PrismaClient();
 
-const calculateAverageScore = (interviews: any[]) => {
+const calculateAverageScore = (interviews: Array<{ score?: number }>) => {
     if (interviews.length === 0) return 0;
     const totalScore = interviews.reduce((acc, interview) => acc + (interview.score || 0), 0);
     return totalScore / interviews.length;
@@ -20,7 +20,7 @@ export const getCandidatesByPositionService = async (positionId: number) => {
             }
         });
 
-        return applications.map(app => ({
+        return applications.map((app: any) => ({
             fullName: `${app.candidate.firstName} ${app.candidate.lastName}`,
             currentInterviewStep: app.interviewStep.name,
             candidateId: app.candidateId,
@@ -55,7 +55,7 @@ export const getInterviewFlowByPositionService = async (positionId: number) => {
         interviewFlow: {
             id: positionWithInterviewFlow.interviewFlow.id,
             description: positionWithInterviewFlow.interviewFlow.description,
-            interviewSteps: positionWithInterviewFlow.interviewFlow.interviewSteps.map(step => ({
+            interviewSteps: positionWithInterviewFlow.interviewFlow.interviewSteps.map((step: any) => ({
                 id: step.id,
                 interviewFlowId: step.interviewFlowId,
                 interviewTypeId: step.interviewTypeId,

@@ -207,8 +207,12 @@ Para ejecutar este proyecto en una instancia EC2 y asegurarte de que GitHub Acti
 
 ### Variables en GitHub Actions
 
-Para que el flujo de trabajo de GitHub Actions funcione correctamente, debes configurar las siguientes variables en los secretos de tu repositorio:
+El deploy usa SSH hacia la instancia EC2 (`appleboy/ssh-action`). Configura estos **secrets** en el repositorio (Settings → Secrets and variables → Actions):
 
-1. **AWS_ACCESS_ID**: Tu ID de clave de acceso de AWS.
-2. **AWS_ACCESS_KEY**: Tu clave de acceso secreta de AWS.
-3. **EC2_INSTANCE**: La dirección IP pública o el nombre DNS de tu instancia EC2.
+1. **AWS_ACCESS_ID**: Usuario SSH de la instancia (`ec2-user` en Amazon Linux, o `ubuntu` en Ubuntu).
+2. **AWS_ACCESS_KEY**: Contenido completo de tu clave privada SSH (archivo `.pem`), incluyendo las líneas `-----BEGIN ... KEY-----` y `-----END ... KEY-----`.
+3. **EC2_INSTANCE**: DNS público o IP pública de la instancia EC2 (ej. `ec2-xx-xx-xx-xx.compute-1.amazonaws.com`).
+
+> Importante: `AWS_ACCESS_KEY` NO es la Secret Access Key de IAM de AWS. Debe ser la clave privada `.pem` con la que te conectas por SSH.
+
+Antes del primer deploy, asegúrate de que en la EC2 estén instalados Node.js 18+, npm, git y PM2, y que el puerto 22 esté abierto hacia GitHub Actions (o al menos hacia internet para pruebas).
